@@ -1,0 +1,16 @@
+{
+  "name": "buscaminas-campo",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Buscaminas en el navegador cuya promesa central es que el azar nunca obliga a adivinar.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "node --test test/"
+  },
+  "devDependencies": {
+    "vite": "^7.3.6"
+  }
+}

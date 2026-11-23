@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Buscaminas CAMPO</title>
+    <meta
+      name="description"
+      content="Buscaminas en el navegador. El modo sin adivinar es el default: cada tablero se puede resolver con logica. Pistas que explican el porque, post-mortem honesto, sin dependencias."
+    />
+    <meta name="theme-color" content="#0a0c10" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" href="./icons/icon-192.png" type="image/png" />
+    <link rel="apple-touch-icon" href="./icons/icon-192.png" />
+  </head>
+  <body>
+    <a class="skip" href="#tablero">Saltar al tablero</a>
+
+    <header class="app-header">
+      <div class="app-shell app-header__inner">
+        <span class="lockup">
+          <svg class="lockup__mark" width="18" height="18" viewBox="0 0 18 18" aria-hidden="true" focusable="false">
+            <rect x="1" y="1" width="16" height="16" rx="3.5" fill="none" stroke="currentColor" stroke-width="1.4" />
+            <rect x="6.2" y="6.2" width="5.6" height="5.6" rx="1.2" fill="var(--accent)" />
+          </svg>
+          <span class="lockup__word">KANAM</span>
+          <span class="lockup__word lockup__word--dim">BUSCAMINAS</span>
+        </span>
+        <span class="chip" id="offline-chip">
+          <span class="chip__dot" aria-hidden="true"></span>
+          Campo local - sin conexion
+        </span>
+      </div>
+    </header>
+
+    <main class="app-shell">
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="hero__copy">
+          <p class="hero__eyebrow">
+            <span class="hero__numeral" aria-hidden="true">01</span>
+            <span class="micro">Lee - marca - revela</span>
+          </p>
+          <h1 class="hero__title" id="hero-title">
+            <span class="hero__title-ink">Piensa en frio.</span>
+            <span class="hero__title-accent">Despeja el campo.</span>
+          </h1>
+          <p class="hero__lede">
+            Cada tablero se puede resolver con logica. Si la suerte fuera necesaria, el
+            juego lo dice: nunca te hace apostar sin avisarte.
+          </p>
+        </div>
+        <svg class="hero__graphic" viewBox="0 0 150 150" aria-hidden="true" focusable="false">
+          <g fill="none" stroke="var(--cell-line)" stroke-width="1">
+            <rect x="10" y="10" width="130" height="130" rx="6" />
+            <line x1="10" y1="53" x2="140" y2="53" />
+            <line x1="10" y1="96" x2="140" y2="96" />
+            <line x1="53" y1="10" x2="53" y2="140" />
+            <line x1="96" y1="10" x2="96" y2="140" />
+          </g>
+          <rect x="56" y="56" width="37" height="37" rx="3" fill="var(--cell-open)" />
+          <text x="74.5" y="81" text-anchor="middle" font-family="ui-monospace, monospace" font-size="18" font-weight="700" fill="var(--num-1)">1</text>
+          <rect x="99" y="99" width="37" height="37" rx="3" fill="var(--cell-hidden)" />
+          <path d="M112 122v-12l10 4-10 4" fill="var(--accent)" />
+        </svg>
+      </section>
+
+      <section class="controls" aria-labelledby="controls-title">
+        <h2 class="micro" id="controls-title">Modo y nivel</h2>
+        <div class="controls__row">
+          <div class="segmented" role="group" aria-label="Modo de juego">
+            <button type="button" class="seg" data-mode="noguess" aria-pressed="true">
+              Sin adivinar
+            </button>
+            <button type="button" class="seg" data-mode="classic" aria-pressed="false">
+              Clasico
+            </button>
+          </div>
+          <div class="segmented" role="group" aria-label="Dificultad">
+            <button type="button" class="seg" data-preset="beginner" aria-pressed="true">Principiante</button>
+            <button type="button" class="seg" data-preset="intermediate" aria-pressed="false">Intermedio</button>
+            <button type="button" class="seg" data-preset="expert" aria-pressed="false">Experto</button>
+          </div>
+          <button type="button" class="btn btn--primary" id="new-game">Partida nueva</button>
+        </div>
+        <p class="controls__note" id="mode-note">
+          Sin adivinar: cada tablero se genera para resolverse solo con logica. Tiene su
+          propia tabla de records.
+        </p>
+      </section>
+
+      <section class="status" aria-label="Estado de la partida">
+        <div class="stat">
+          <span class="stat__label">Minas</span>
+          <span class="stat__value" id="stat-mines">10</span>
+        </div>
+        <div class="stat">
+          <span class="stat__label">Tiempo</span>
+          <span class="stat__value" id="stat-time">00:00</span>
+        </div>
+        <div class="stat">
+          <span class="stat__label">3BV</span>
+          <span class="stat__value" id="stat-bv">-</span>
+        </div>
+        <div class="stat">
+          <span class="stat__label">Eficiencia</span>
+          <span class="stat__value" id="stat-eff">-</span>
+        </div>
+        <div class="status__actions">
+          <button type="button" class="btn" id="hint-btn">Pista</button>
+          <button type="button" class="btn" id="pause-btn" aria-pressed="false">Pausar</button>
+        </div>
+      </section>
+
+      <section class="board-area" aria-labelledby="board-caption">
+        <h2 class="visually-hidden" id="board-caption">Tablero</h2>
+        <p class="board-area__note" id="board-note" hidden></p>
+        <div class="board-scroll" id="tablero">
+          <div class="board" id="board" role="grid" aria-label="Tablero de buscaminas"></div>
+        </div>
+        <p class="board-hint" id="board-hint" role="status" aria-live="polite">
+          Primer clic siempre seguro. Flechas para mover, Enter para revelar, F para
+          marcar, C para despejar alrededor.
+        </p>
+      </section>
+
+      <section class="hint" id="hint-panel" aria-labelledby="hint-title" hidden>
+        <h2 class="micro" id="hint-title">
+          <span class="tech-badge" id="hint-tech">conteo</span>
+          <span id="hint-lead">Pista</span>
+        </h2>
+        <p id="hint-body"></p>
+      </section>
+
+      <section class="records" aria-labelledby="records-title">
+        <h2 class="micro" id="records-title">Records</h2>
+        <table class="records__table">
+          <thead>
+            <tr>
+              <th scope="col">Nivel</th>
+              <th scope="col">Modo</th>
+              <th scope="col">Limpio</th>
+              <th scope="col">Con pista</th>
+            </tr>
+          </thead>
+          <tbody id="records-body"></tbody>
+        </table>
+        <p class="records__note">
+          Una pista no anula el record: se registra aparte. La columna limpia es la
+          partida sin pistas.
+        </p>
+      </section>
+    </main>
+
+    <footer class="app-footer">
+      <div class="app-shell app-footer__inner">
+        <p>
+          Sin dependencias de runtime. Sin cuentas. Sin red.
+          <span id="version">v0.1.0</span>
+        </p>
+        <p class="footer__seed" id="seed-line" hidden>Semilla <code id="seed-value"></code></p>
+      </div>
+    </footer>
+
+    <script type="module" src="./src/ui/main.js"></script>
+  </body>
+</html>

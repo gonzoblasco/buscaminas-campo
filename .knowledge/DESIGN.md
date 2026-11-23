@@ -86,4 +86,5 @@ El playground mostraba lineas SVG desde el numero que restringe hacia las celdas
 afectadas. En el juego, la pista **resalta** las celdas afectadas en vez de trazar
 lineas: resaltar no puede cruzar numeros y no necesita instrumentar un overlay sobre
 el tablero, que era el riesgo declarado del prototipo. El trazado completo sigue en
-el playground como referencia.
+`.knowledge/campo-prototype.html` (copia del playground aprobado, para que la
+referencia no dependa de una carpeta que el workspace no versiona).

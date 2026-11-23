@@ -1,0 +1,941 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Buscaminas — direcciones visuales e ideas</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --ui: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --page: #08090b;
+    --panel: #101318;
+    --panel2: #161a21;
+    --stroke: #262c36;
+    --ink: #e8ecf2;
+    --ink-dim: #98a2b3;
+    --accent: #ff7a1a;
+    --ok: #45d483;
+    --bad: #ff6b6b;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--page);
+    color: var(--ink);
+    font: 14px/1.5 var(--ui);
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1440px; margin: 0 auto; padding: 20px 20px 80px; }
+  h1 { font-size: 19px; font-weight: 650; letter-spacing: -0.02em; margin: 0 0 2px; }
+  .sub { color: var(--ink-dim); font-size: 12.5px; margin: 0 0 18px; }
+
+  .layout { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 20px; align-items: start; }
+  .layout > .stagecol { max-width: 820px; }
+  @media (max-width: 980px) { .layout { grid-template-columns: 1fr; } }
+
+  .card { background: var(--panel); border: 1px solid var(--stroke); border-radius: 10px; }
+  .block { padding: 14px; }
+  .block + .block { border-top: 1px solid var(--stroke); }
+  .block h2 {
+    font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.12em;
+    color: var(--ink-dim); font-weight: 600; margin: 0 0 10px;
+  }
+
+  .dirs { display: grid; gap: 6px; }
+  .dir {
+    display: grid; grid-template-columns: 26px minmax(0,1fr); gap: 9px; align-items: center;
+    padding: 8px 9px; border-radius: 7px; border: 1px solid transparent;
+    background: transparent; color: inherit; text-align: left; cursor: pointer;
+    font: inherit; width: 100%;
+  }
+  .dir:hover { background: var(--panel2); }
+  .dir[aria-pressed="true"] { background: var(--panel2); border-color: var(--stroke); }
+  .swatch { width: 26px; height: 26px; border-radius: 5px; border: 1px solid rgba(255,255,255,0.14); }
+  .dir strong { display: block; font-size: 12.5px; font-weight: 600; letter-spacing: -0.01em; }
+  .dir span { display: block; font-size: 11px; color: var(--ink-dim); font-family: var(--mono); }
+
+  .ctl { margin-bottom: 13px; }
+  .ctl:last-child { margin-bottom: 0; }
+  .ctl label { display: flex; justify-content: space-between; font-size: 11.5px; color: var(--ink-dim); margin-bottom: 5px; }
+  .ctl output { font-family: var(--mono); color: var(--ink); font-size: 11px; }
+  input[type="range"] { width: 100%; accent-color: var(--accent); height: 16px; }
+
+  .segs { display: flex; gap: 4px; flex-wrap: wrap; }
+  .seg {
+    flex: 1 1 auto; padding: 6px 8px; font: inherit; font-size: 11px; cursor: pointer;
+    background: var(--panel2); color: var(--ink-dim); border: 1px solid var(--stroke);
+    border-radius: 6px; white-space: nowrap;
+  }
+  .seg[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #0b0d10; font-weight: 650; }
+
+  .toggle { display: flex; gap: 9px; align-items: flex-start; cursor: pointer; font-size: 12px; line-height: 1.35; }
+  .toggle input { margin-top: 2px; accent-color: var(--accent); }
+  .toggle small { display: block; color: var(--ink-dim); font-size: 11px; }
+
+  /* ---------- preview ---------- */
+  .stage {
+    --bg: #0a0c10; --surface: #121620; --surface-2: #1a1f2b; --line: #2b3240; --ctrl-line: #626c7a;
+    --text: #e9edf4; --text-dim: #9aa4b5; --accent: #ff7a1a;
+    --cell-hidden: #1f2531; --cell-open: #0d1017; --cell-mine: #3a1410;
+    --num: #7cc7ff;
+    --radius: 8px;
+    position: relative; overflow: hidden; border-radius: 10px;
+    border: 1px solid var(--stroke);
+    background: var(--bg); color: var(--text);
+    transition: background 180ms ease, color 180ms ease;
+    isolation: isolate;
+  }
+  .stage__bg {
+    position: absolute; inset: 0; pointer-events: none; z-index: 0; opacity: 0;
+    background-image:
+      repeating-linear-gradient(0deg, var(--line) 0 1px, transparent 1px 24px),
+      repeating-linear-gradient(90deg, var(--line) 0 1px, transparent 1px 24px);
+    transition: opacity 200ms ease;
+  }
+  .stage__grain {
+    position: absolute; inset: 0; pointer-events: none; z-index: 0; opacity: 0;
+    mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/></filter><rect width='140' height='140' filter='url(%23n)' opacity='0.55'/></svg>");
+    transition: opacity 200ms ease;
+  }
+  .stage__inner { position: relative; z-index: 1; padding: 18px 20px 22px; }
+
+  .pbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+  .lockup { display: flex; align-items: center; gap: 8px; }
+  .lockup svg { display: block; }
+  .lockup b { font-size: 12px; letter-spacing: 0.14em; font-weight: 700; }
+  .lockup em { font-style: normal; font-size: 12px; letter-spacing: 0.14em; color: var(--text-dim); }
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono);
+    font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase;
+    border: 1px solid var(--ctrl-line); border-radius: 999px; padding: 4px 9px; color: var(--text-dim);
+  }
+  .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
+
+  .phead { margin-bottom: 14px; }
+  .eyebrow { font-family: var(--mono); font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--text-dim); display: flex; gap: 8px; align-items: center; margin: 0 0 7px; }
+  .eyebrow .n { color: var(--accent); font-weight: 700; }
+  .phead h3 { font-size: 23px; line-height: 1.12; letter-spacing: -0.028em; margin: 0 0 7px; font-weight: 700; }
+  .phead h3 .dim { color: var(--text-dim); }
+  .phead p { margin: 0; font-size: 12px; color: var(--text-dim); max-width: 46ch; line-height: 1.45; }
+
+  .modes { display: flex; gap: 6px; margin-bottom: 13px; flex-wrap: wrap; }
+  .mode {
+    font: inherit; font-size: 11px; padding: 5px 10px; border-radius: 6px; cursor: pointer;
+    background: transparent; color: var(--text-dim); border: 1px solid var(--ctrl-line);
+  }
+  .mode[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #0b0d10; font-weight: 650; }
+
+  .stats { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
+  .stat {
+    border: 1px solid var(--ctrl-line); border-radius: var(--radius); padding: 5px 9px;
+    font-family: var(--mono); font-size: 10.5px; color: var(--text-dim); letter-spacing: 0.04em;
+  }
+  .stat b { color: var(--text); font-weight: 700; }
+
+  .boardwrap { display: grid; grid-template-columns: minmax(0, 1fr) 210px; gap: 18px; align-items: start; }
+  @media (max-width: 720px) { .boardwrap { grid-template-columns: 1fr; } }
+
+  .board {
+    display: grid; gap: 3px; width: 100%; max-width: 460px;
+    grid-template-columns: repeat(8, 1fr);
+  }
+
+  .cell {
+    position: relative; aspect-ratio: 1; border: 0; padding: 0; cursor: pointer;
+    border-radius: var(--radius);
+    font-family: var(--mono); font-size: 12px; font-weight: 700;
+    display: grid; place-items: center; line-height: 1;
+    background: var(--cell-hidden); color: var(--text-dim);
+    transition: background 130ms ease, transform 130ms ease;
+  }
+  .cell:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .cell.revealed { background: var(--cell-open); cursor: default; }
+  .cell.flag { color: var(--accent); }
+  .cell.boom { background: var(--cell-mine); }
+  .stage[data-cell="bevel"] .cell { box-shadow: inset 0 1px 0 rgba(255,255,255,0.055), inset 0 -2px 0 rgba(0,0,0,0.35); }
+  .stage[data-cell="bevel"] .cell.revealed { box-shadow: none; }
+  .stage[data-cell="hairline"] .cell { background: var(--cell-hidden); border: 1px solid var(--ctrl-line); }
+  .stage[data-cell="hairline"] .cell.revealed { background: var(--cell-open); border-color: var(--line); }
+
+  .hintbox {
+    border: 1px solid var(--ctrl-line); border-radius: var(--radius); padding: 10px 11px;
+    font-size: 11.5px; line-height: 1.45; color: var(--text);
+    background: color-mix(in srgb, var(--surface) 80%, transparent);
+  }
+  .hintbox h4 { margin: 0 0 5px; font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-dim); font-weight: 600; }
+  .hintbox .tech {
+    font-family: var(--mono); font-size: 10px; color: var(--accent);
+    border: 1px solid var(--accent); border-radius: 4px; padding: 1px 5px; margin-right: 4px;
+  }
+  .hintbox p { margin: 6px 0 0; color: var(--text-dim); font-size: 11px; }
+
+  .legend { display: grid; gap: 3px; margin-top: 10px; font-family: var(--mono); font-size: 10px; color: var(--text-dim); }
+  .legend span { display: flex; align-items: center; gap: 6px; }
+  .legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+
+  /* ---------- contrast meter ---------- */
+  .meter { margin-top: 14px; }
+  .meter table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 10.5px; }
+  .meter th, .meter td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--stroke); }
+  .meter th { color: var(--ink-dim); font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; font-size: 9.5px; }
+  .meter td:last-child, .meter th:last-child { text-align: right; }
+  .pass { color: var(--ok); }
+  .fail { color: var(--bad); }
+  .ratio { font-variant-numeric: tabular-nums; }
+
+  /* ---------- ideas ---------- */
+  .ideas { margin-top: 22px; display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+  .idea { padding: 15px; }
+  .idea .tag {
+    font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--accent); margin-bottom: 7px; display: block;
+  }
+  .idea h3 { margin: 0 0 7px; font-size: 14px; font-weight: 650; letter-spacing: -0.012em; }
+  .idea p { margin: 0 0 9px; font-size: 12px; color: var(--ink-dim); line-height: 1.55; }
+  .idea ul { margin: 0; padding-left: 16px; font-size: 11.5px; color: var(--ink-dim); line-height: 1.6; }
+  .idea li b { color: var(--ink); font-weight: 600; }
+  .sketch {
+    margin-top: 10px; border: 1px solid var(--stroke); border-radius: 8px; padding: 10px;
+    background: var(--panel2); font-family: var(--mono); font-size: 10px; color: var(--ink-dim); line-height: 1.6;
+    white-space: pre; overflow-x: auto;
+  }
+  .sketch b { color: var(--accent); }
+
+  /* ---------- prompt ---------- */
+  .promptwrap { margin-top: 18px; }
+  .prompthead { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .prompthead h2 { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--ink-dim); margin: 0; font-weight: 600; }
+  button.copy {
+    font: inherit; font-size: 11px; padding: 5px 11px; border-radius: 6px; cursor: pointer;
+    background: var(--accent); color: #0b0d10; border: 0; font-weight: 650;
+  }
+  button.copy:active { transform: translateY(1px); }
+  pre.prompt {
+    margin: 0; padding: 14px; border: 1px solid var(--stroke); border-radius: 10px;
+    background: var(--panel); font-family: var(--mono); font-size: 11.5px; line-height: 1.65;
+    white-space: pre-wrap; color: #cdd5e0;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Buscaminas — direcciones visuales</h1>
+  <p class="sub">Tablero real, contrastes calculados en vivo. Elegí una dirección y copiá el prompt.</p>
+
+  <div class="layout">
+    <!-- ============ CONTROLS ============ -->
+    <div class="card">
+      <div class="block">
+        <h2>Dirección</h2>
+        <div class="dirs" id="dirs"></div>
+      </div>
+
+      <div class="block">
+        <h2>Ajustes</h2>
+        <div class="ctl">
+          <label for="radius">Radio de celda <output id="radiusOut">8px</output></label>
+          <input id="radius" type="range" min="0" max="16" value="8" step="1" />
+        </div>
+        <div class="ctl">
+          <label for="hue">Giro del acento <output id="hueOut">0°</output></label>
+          <input id="hue" type="range" min="-160" max="160" value="0" step="4" />
+        </div>
+        <div class="ctl">
+          <label for="tex">Textura de fondo <output id="texOut">60%</output></label>
+          <input id="tex" type="range" min="0" max="100" value="60" step="5" />
+        </div>
+        <div class="ctl">
+          <label>Celdas</label>
+          <div class="segs" id="cellSegs"></div>
+        </div>
+        <div class="ctl">
+          <label>Los 8 números</label>
+          <div class="segs" id="numSegs"></div>
+        </div>
+        <div class="ctl">
+          <label class="toggle">
+            <input type="checkbox" id="why" />
+            <span>Mostrar «el porqué»<small>Líneas que conectan el número con las celdas que restringe.</small></span>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ STAGE ============ -->
+    <div class="stagecol">
+      <div class="stage" id="stage" data-cell="flat">
+        <div class="stage__bg" id="stageBg"></div>
+        <div class="stage__grain" id="stageGrain"></div>
+        <div class="stage__inner">
+          <div class="pbar">
+            <div class="lockup">
+              <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+                <rect x="1" y="1" width="16" height="16" rx="3.5" fill="none" stroke="currentColor" stroke-width="1.4"/>
+                <rect x="6.2" y="6.2" width="5.6" height="5.6" rx="1.2" fill="var(--accent)"/>
+              </svg>
+              <b>KANAM</b> <em>MINESWEEPER</em>
+            </div>
+            <span class="chip"><span class="dot"></span><span id="chipText">Campo local</span></span>
+          </div>
+
+          <div class="phead">
+            <p class="eyebrow"><span class="n">01</span><span>Lee · marca · revela</span></p>
+            <h3><span id="h1a">Piensa en frío.</span><br><span class="dim" id="h1b">Despeja el campo.</span></h3>
+            <p id="lede">Primer clic siempre seguro. Las pistas explican el porqué, no solo el resultado.</p>
+          </div>
+
+          <div class="modes" id="modes"></div>
+
+          <div class="stats">
+            <span class="stat">MINAS <b id="sMines">10</b></span>
+            <span class="stat">TIEMPO <b id="sTime">00:00</b></span>
+            <span class="stat">3BV <b id="sBv">14</b></span>
+            <span class="stat">EFIC <b id="sEff">—</b></span>
+          </div>
+
+          <div class="boardwrap">
+            <div class="board" id="board" role="grid" aria-label="Tablero de buscaminas"></div>
+            <div>
+              <div class="hintbox">
+                <h4>Pista</h4>
+                <span class="tech" id="techName">conteo</span>
+                <span id="hintLead">Dos celdas resueltas.</span>
+                <p id="hintBody">El 1 de B3 ya tiene su mina marcada, así que A2 y A3 son seguras.</p>
+              </div>
+              <div class="legend" id="legend"></div>
+            </div>
+          </div>
+
+          <div class="meter">
+            <table>
+              <thead>
+                <tr><th>par</th><th>ratio</th><th>piso</th><th>estado</th></tr>
+              </thead>
+              <tbody id="meterBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============ IDEAS ============ -->
+      <div class="ideas">
+        <div class="card idea">
+          <span class="tag">Idea A · ya se ve arriba</span>
+          <h3>El porqué, dibujado</h3>
+          <p>Hoy la pista dice «A2 y A3 son seguras» en texto. La idea es que el tablero lo muestre: el número que restringe, líneas finas hacia las celdas afectadas y el conteo en el borde.</p>
+          <ul>
+            <li><b>Por qué importa:</b> el diferencial declarado es «explica, no solo resuelve». El texto lo dice; la forma lo demuestra.</li>
+            <li><b>Costo:</b> SVG por encima del tablero, sin tocar el motor.</li>
+            <li><b>Riesgo:</b> las líneas no pueden cruzar números (invalidaría la lectura).</li>
+          </ul>
+          <div class="sketch">  <b>1</b> ─┐
+     ├─► A2  seguro   (mina ya marcada)
+     └─► A3  seguro</div>
+        </div>
+
+        <div class="card idea">
+          <span class="tag">Idea B</span>
+          <h3>La jugada arriesgada, con número</h3>
+          <p>En modo sin adivinanza, si igual querés clickear una celda que el solver no puede probar, el juego te dice la probabilidad exacta antes. Si la jugás, queda registrada como apuesta y el post-mortem la nombra.</p>
+          <ul>
+            <li><b>Por qué importa:</b> convierte «perdí por mala suerte» en «elegí un 30%». La culpa deja de ser del azar.</li>
+            <li><b>Costo:</b> medio. Exige enumeración por componente para dar el número honesto.</li>
+            <li><b>Riesgo:</b> si la probabilidad está mal calculada, es peor que no mostrarla. Necesita gate.</li>
+          </ul>
+          <div class="sketch">celda C5  ──  3 de 10 configuraciones
+             <b>30%</b> mina   ·   no deducible
+[ jugar igual ]  [ ver por qué ]</div>
+        </div>
+
+        <div class="card idea">
+          <span class="tag">Idea C</span>
+          <h3>Replay que nombra la técnica</h3>
+          <p>Al terminar, un control deslizante reproduce tu partida paso a paso. Cada movimiento lleva la técnica que lo habilitaba, y al final una línea: «te trabaste en el paso 34; ahí había un 1-2-1».</p>
+          <ul>
+            <li><b>Por qué importa:</b> es el modo entrenador sin lecciones. Enseña con tu propia partida, que es lo que recordás.</li>
+            <li><b>Costo:</b> medio. Requiere guardar la pila de acciones (hoy el estado no la guarda).</li>
+            <li><b>Riesgo:</b> el log crece; hay que acotarlo por partida.</li>
+          </ul>
+          <div class="sketch">◀━━━━━━━●━━━━━━━━━━━━━━━━━━▶  34/61
+paso 34  ·  subset 1-2-1  ·  B4,C4 seguras</div>
+        </div>
+      </div>
+
+      <!-- ============ PROMPT ============ -->
+      <div class="promptwrap">
+        <div class="prompthead">
+          <h2>Prompt para el agente</h2>
+          <button class="copy" id="copyBtn">Copiar</button>
+        </div>
+        <pre class="prompt" id="prompt"></pre>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  "use strict";
+
+  // ---------- palettes ----------
+  const DIRECTIONS = [
+    {
+      id: "campo",
+      name: "CAMPO",
+      note: "STUDIO · placa de campo",
+      swatch: ["#0a0c10", "#ff7a1a"],
+      chip: "Campo local · sin conexión",
+      h1a: "Piensa en frío.", h1b: "Despeja el campo.",
+      lede: "Primer clic siempre seguro. Las pistas explican el porqué, no solo el resultado. Y cada razonamiento se puede verificar contra el tablero.",
+      vars: {
+        bg: "#0a0c10", surface: "#121620", "surface-2": "#1a1f2b",
+        line: "#2b3240", "ctrl-line": "#626c7a",
+        text: "#e9edf4", "text-dim": "#9aa4b5", accent: "#ff7a1a",
+        "cell-hidden": "#1f2531", "cell-open": "#0d1017", "cell-mine": "#3a1410"
+      },
+      nums: ["#7cc7ff","#6ee7a8","#ff9a8a","#c9a6ff","#ffd166","#6fd9d0","#f0f0f0","#9aa4b2"],
+      texture: 0.6, cell: "hairline", radius: 8, accentHue: 0
+    },
+    {
+      id: "neutral",
+      name: "Neutro v1",
+      note: "lo que corre hoy",
+      swatch: ["#0d0f12", "#ff7a1a"],
+      chip: "Campo local · sin conexión",
+      h1a: "Piensa en frío.", h1b: "Despeja el campo.",
+      lede: "Primer clic siempre seguro. Las pistas explican el porqué, no solo el resultado.",
+      vars: {
+        bg: "#0d0f12", surface: "#15181e", "surface-2": "#1b1f27",
+        line: "#2a303a", "ctrl-line": "#79828f",
+        text: "#e8ecf2", "text-dim": "#98a2b3", accent: "#ff7a1a",
+        "cell-hidden": "#1f2531", "cell-open": "#0c0f14", "cell-mine": "#3a1410"
+      },
+      nums: ["#7cc7ff","#6ee7a8","#ff9a8a","#c9a6ff","#ffd166","#6fd9d0","#f0f0f0","#9aa4b2"],
+      texture: 0, cell: "flat", radius: 8, accentHue: 0
+    },
+    {
+      id: "arcade",
+      name: "Arcade CRT",
+      note: "fósforo verde · mono",
+      swatch: ["#06100a", "#3dff9e"],
+      chip: "SISTEMA LOCAL · READY",
+      h1a: "PIENSA. BARRE.", h1b: "CAMPO LIMPIO.",
+      lede: "Pensado para quien juega rápido. Contraste alto, cero decoración, todo el ancho de banda visual en el número.",
+      vars: {
+        bg: "#06100a", surface: "#0a1a11", "surface-2": "#0e2417",
+        line: "#17402a", "ctrl-line": "#2f7a51",
+        text: "#d8ffe8", "text-dim": "#6fbf92", accent: "#3dff9e",
+        "cell-hidden": "#0f2a1b", "cell-open": "#061009", "cell-mine": "#3a0f0f"
+      },
+      nums: ["#1f9e63","#35c47d","#4fe098","#79f2b5","#a5f8cc","#c9fbdf","#e6fdf1","#f4fffa"],
+      texture: 0.85, cell: "bevel", radius: 2, accentHue: 0
+    },
+    {
+      id: "papel",
+      name: "Papel",
+      note: "claro · editorial",
+      swatch: ["#f4f1ea", "#c2410c"],
+      chip: "LOCAL · SIN RED",
+      h1a: "Piensa en frío.", h1b: "Despeja el campo.",
+      lede: "El buscaminas como hoja de trabajo. Un sistema claro, con tinta de verdad, para jugar de día y sin fatiga.",
+      vars: {
+        bg: "#f4f1ea", surface: "#ffffff", "surface-2": "#eee9df",
+        line: "#ddd5c6", "ctrl-line": "#8f8574",
+        text: "#191510", "text-dim": "#6b6152", accent: "#c2410c",
+        "cell-hidden": "#e6ddcc", "cell-open": "#fbf8f1", "cell-mine": "#f3c9bd"
+      },
+      nums: ["#1d4ed8","#15803d","#b91c1c","#6d28d9","#a16207","#0e7490","#191510","#57534e"],
+      texture: 0.35, cell: "hairline", radius: 4, accentHue: 0, light: true
+    },
+    {
+      id: "blueprint",
+      name: "Blueprint",
+      note: "técnico · azul profundo",
+      swatch: ["#08131f", "#4cc9f0"],
+      chip: "PLANO 01 · OFFLINE",
+      h1a: "Mide el campo.", h1b: "Anota el riesgo.",
+      lede: "Cada celda es una unidad de plano. Los números son cotas, no adornos. Pensado para quien quiere ver el tablero como un problema.",
+      vars: {
+        bg: "#08131f", surface: "#0d1b2b", "surface-2": "#122334",
+        line: "#1b3448", "ctrl-line": "#4a80a8",
+        text: "#e3f2fb", "text-dim": "#8fb4cd", accent: "#4cc9f0",
+        "cell-hidden": "#122334", "cell-open": "#081018", "cell-mine": "#3a1416"
+      },
+      nums: ["#7cc7ff","#6ee7a8","#ff9a8a","#c9a6ff","#ffd166","#6fd9d0","#f0f0f0","#9aa4b2"],
+      texture: 0.95, cell: "hairline", radius: 1, accentHue: 0
+    }
+  ];
+
+  const DEFAULTS = {
+    dir: "campo", radius: 8, hue: 0, tex: 0.6, cell: "hairline",
+    num: "hue", why: false, mode: "clasico"
+  };
+
+  const state = { ...DEFAULTS };
+
+  // ---------- board (fixed, deterministic) ----------
+  const SIZE = 8;
+  const MINES = [[0,6],[1,3],[3,0],[3,6],[4,0],[4,7],[5,0],[6,2],[6,3],[7,6]];
+  const isMine = (r,c) => MINES.some(([mr,mc]) => mr===r && mc===c);
+  const neighbors = (r,c) => {
+    const out = [];
+    for (let dr=-1; dr<=1; dr++) for (let dc=-1; dc<=1; dc++) {
+      if (!dr && !dc) continue;
+      const nr=r+dr, nc=c+dc;
+      if (nr>=0 && nr<SIZE && nc>=0 && nc<SIZE) out.push([nr,nc]);
+    }
+    return out;
+  };
+  const countOf = (r,c) => neighbors(r,c).filter(([a,b]) => isMine(a,b)).length;
+
+  // opening reveal: a real flood fill from a safe cell, for a believable board
+  const revealed = new Set();
+  const flags = new Set();
+  let clicks = 0;
+  function flood(r, c) {
+    const stack = [[r,c]];
+    while (stack.length) {
+      const [cr, cc] = stack.pop();
+      const k = cr*SIZE+cc;
+      if (revealed.has(k) || flags.has(k) || isMine(cr,cc)) continue;
+      revealed.add(k);
+      if (countOf(cr,cc) === 0) neighbors(cr,cc).forEach(n => stack.push(n));
+    }
+  }
+  flood(3,3);
+  flags.add(1*SIZE+3);
+
+  // real 3BV: zero-regions + numbered cells never adjacent to a zero cell
+  const TOTAL_SAFE = SIZE*SIZE - MINES.length;
+  const bv = (() => {
+    const zeros = [];
+    for (let r=0; r<SIZE; r++) for (let c=0; c<SIZE; c++)
+      if (!isMine(r,c) && countOf(r,c) === 0) zeros.push([r,c]);
+    const seen = new Set(), adjZero = new Set();
+    let regions = 0;
+    for (const [zr,zc] of zeros) {
+      const k0 = zr*SIZE+zc;
+      if (seen.has(k0)) continue;
+      regions++;
+      const st = [[zr,zc]];
+      while (st.length) {
+        const [cr,cc] = st.pop();
+        const kk = cr*SIZE+cc;
+        if (seen.has(kk)) continue;
+        seen.add(kk);
+        for (const [a,b] of neighbors(cr,cc)) {
+          adjZero.add(a*SIZE+b);
+          if (!isMine(a,b) && countOf(a,b) === 0) st.push([a,b]);
+        }
+      }
+    }
+    let numbered = 0;
+    for (let r=0; r<SIZE; r++) for (let c=0; c<SIZE; c++) {
+      if (isMine(r,c) || countOf(r,c) === 0) continue;
+      if (adjZero.has(r*SIZE+c)) continue;
+      numbered++;
+    }
+    return regions + numbered;
+  })();
+
+  // ---------- helpers ----------
+  const rgb = h => {
+    h = h.replace("#","");
+    return [parseInt(h.slice(0,2),16), parseInt(h.slice(2,4),16), parseInt(h.slice(4,6),16)];
+  };
+  const hex = ([r,g,b]) => "#" + [r,g,b].map(v => Math.round(Math.max(0,Math.min(255,v))).toString(16).padStart(2,"0")).join("");
+  const ch = v => { v/=255; return v <= 0.03928 ? v/12.92 : Math.pow((v+0.055)/1.055, 2.4); };
+  const lum = h => { const [r,g,b] = rgb(h); return 0.2126*ch(r) + 0.7152*ch(g) + 0.0722*ch(b); };
+  const contrast = (a,b) => {
+    const la = lum(a), lb = lum(b), hi = Math.max(la,lb), lo = Math.min(la,lb);
+    return (hi+0.05)/(lo+0.05);
+  };
+
+  function rotateHue(hexColor, deg) {
+    if (!deg) return hexColor;
+    let [r,g,b] = rgb(hexColor).map(v => v/255);
+    const max = Math.max(r,g,b), min = Math.min(r,g,b), l = (max+min)/2;
+    let h = 0, s = 0;
+    if (max !== min) {
+      const d = max-min;
+      s = l > 0.5 ? d/(2-max-min) : d/(max+min);
+      if (max === r) h = ((g-b)/d + (g<b?6:0));
+      else if (max === g) h = ((b-r)/d + 2);
+      else h = ((r-g)/d + 4);
+      h *= 60;
+    }
+    h = (h + deg + 360) % 360;
+    const c = (1-Math.abs(2*l-1))*s, x = c*(1-Math.abs((h/60)%2-1)), m = l-c/2;
+    let rr,gg,bb;
+    if (h<60) [rr,gg,bb]=[c,x,0];
+    else if (h<120) [rr,gg,bb]=[x,c,0];
+    else if (h<180) [rr,gg,bb]=[0,c,x];
+    else if (h<240) [rr,gg,bb]=[0,x,c];
+    else if (h<300) [rr,gg,bb]=[x,0,c];
+    else [rr,gg,bb]=[c,0,x];
+    return hex([(rr+m)*255,(gg+m)*255,(bb+m)*255]);
+  }
+
+  const NUM_WEIGHTS = [500,600,600,700,700,800,800,900];
+  const NUM_DUAL = ["#7cc7ff","#6ee7a8","#ff9a8a","#7cc7ff","#6ee7a8","#7cc7ff","#f0f0f0","#9aa4b2"];
+  const NUM_DUAL_LIGHT = ["#1d4ed8","#15803d","#b91c1c","#1d4ed8","#15803d","#1d4ed8","#191510","#57534e"];
+
+  // ---------- DOM ----------
+  const $ = id => document.getElementById(id);
+  const stage = $("stage");
+  const boardEl = $("board");
+  const dirsEl = $("dirs");
+  const cellSegs = $("cellSegs");
+  const numSegs = $("numSegs");
+  const modesEl = $("modes");
+  const meterBody = $("meterBody");
+  const promptEl = $("prompt");
+
+  const current = () => DIRECTIONS.find(d => d.id === state.dir);
+
+  // ---------- build controls ----------
+  DIRECTIONS.forEach(d => {
+    const b = document.createElement("button");
+    b.className = "dir";
+    b.type = "button";
+    b.dataset.dir = d.id;
+    b.innerHTML = `<span class="swatch" style="background:linear-gradient(135deg,${d.swatch[0]} 55%,${d.swatch[1]} 55%)"></span>
+      <span><strong>${d.name}</strong><span>${d.note}</span></span>`;
+    b.addEventListener("click", () => {
+      state.dir = d.id;
+      state.radius = d.radius;
+      state.cell = d.cell;
+      state.hue = d.accentHue;
+      state.tex = d.texture;
+      syncControls();
+      render();
+    });
+    dirsEl.appendChild(b);
+  });
+
+  const CELL_OPTS = [["flat","planas"],["bevel","biseladas"],["hairline","hairline"]];
+  CELL_OPTS.forEach(([v,label]) => {
+    const b = document.createElement("button");
+    b.className = "seg"; b.type = "button"; b.dataset.v = v; b.textContent = label;
+    b.addEventListener("click", () => { state.cell = v; render(); });
+    cellSegs.appendChild(b);
+  });
+
+  const NUM_OPTS = [["hue","8 tonos"],["dual","3 familias"],["weight","solo peso"]];
+  NUM_OPTS.forEach(([v,label]) => {
+    const b = document.createElement("button");
+    b.className = "seg"; b.type = "button"; b.dataset.v = v; b.textContent = label;
+    b.addEventListener("click", () => { state.num = v; render(); });
+    numSegs.appendChild(b);
+  });
+
+  const MODE_OPTS = [["clasico","Clásico"],["noguess","Sin adivinar"],["daily","Del día"]];
+  MODE_OPTS.forEach(([v,label]) => {
+    const b = document.createElement("button");
+    b.className = "mode"; b.type = "button"; b.dataset.v = v; b.textContent = label;
+    b.addEventListener("click", () => { state.mode = v; render(); });
+    modesEl.appendChild(b);
+  });
+
+  $("radius").addEventListener("input", e => { state.radius = +e.target.value; render(); });
+  $("hue").addEventListener("input", e => { state.hue = +e.target.value; render(); });
+  $("tex").addEventListener("input", e => { state.tex = +e.target.value/100; render(); });
+  $("why").addEventListener("change", e => { state.why = e.target.checked; render(); });
+
+  function syncControls() {
+    $("radius").value = state.radius;
+    $("hue").value = state.hue;
+    $("tex").value = Math.round(state.tex*100);
+    $("why").checked = state.why;
+    document.querySelectorAll(".dir").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.dir === state.dir)));
+    document.querySelectorAll("#cellSegs .seg").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === state.cell)));
+    document.querySelectorAll("#numSegs .seg").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === state.num)));
+    document.querySelectorAll("#modes .mode").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === state.mode)));
+  }
+
+  // ---------- board ----------
+  const COLS = "ABCDEFGH";
+  let lastFocus = null;
+
+  function buildBoard() {
+    boardEl.innerHTML = "";
+    for (let r=0; r<SIZE; r++) {
+      for (let c=0; c<SIZE; c++) {
+        const cell = document.createElement("button");
+        cell.type = "button";
+        cell.className = "cell";
+        cell.setAttribute("role","gridcell");
+        cell.dataset.r = r; cell.dataset.c = c;
+        cell.addEventListener("click", () => onReveal(r,c));
+        cell.addEventListener("contextmenu", e => { e.preventDefault(); onFlag(r,c); });
+        cell.addEventListener("keydown", e => { if (e.key === "f" || e.key === "F") { e.preventDefault(); onFlag(r,c); } });
+        boardEl.appendChild(cell);
+      }
+    }
+  }
+
+  function onReveal(r,c) {
+    if (flags.has(r*SIZE+c) || revealed.has(r*SIZE+c)) return;
+    clicks++;
+    if (isMine(r,c)) {
+      // show a boom, then restore
+      const el = boardEl.children[r*SIZE+c];
+      el.classList.add("boom");
+      el.textContent = "✕";
+      setTimeout(() => { el.classList.remove("boom"); el.textContent = ""; clicks--; render(); }, 700);
+      return;
+    }
+    flood(r,c);
+    render();
+  }
+
+  function onFlag(r,c) {
+    if (revealed.has(r*SIZE+c)) return;
+    const k = r*SIZE+c;
+    flags.has(k) ? flags.delete(k) : flags.add(k);
+    render();
+  }
+
+  // ---------- render ----------
+  function render() {
+    const d = current();
+    const accent = rotateHue(d.vars.accent, state.hue);
+    const accentText = contrast(accent, d.vars.bg) >= 3 ? accent : rotateHue(d.vars.accent, state.hue);
+
+    // tokens
+    const s = stage.style;
+    Object.entries(d.vars).forEach(([k,v]) => {
+      let val = v;
+      if (k === "accent") val = accent;
+      s.setProperty("--" + k, val);
+    });
+    s.setProperty("--radius", state.radius + "px");
+    stage.dataset.cell = state.cell;
+
+    // numbers
+    const dual = d.light ? NUM_DUAL_LIGHT : NUM_DUAL;
+    const numColors = state.num === "hue" ? d.nums
+      : state.num === "dual" ? dual
+      : d.nums.map(() => d.vars.text);
+
+    // background layers
+    $("stageBg").style.opacity = String(Math.min(0.5, state.tex * 0.5));
+    $("stageGrain").style.opacity = String(state.tex * 0.05);
+
+    // copy
+    $("chipText").textContent = d.chip;
+    $("h1a").textContent = d.h1a;
+    $("h1b").textContent = d.h1b;
+    $("lede").textContent = d.lede;
+
+    // controls readout
+    $("radiusOut").textContent = state.radius + "px";
+    $("hueOut").textContent = (state.hue > 0 ? "+" : "") + state.hue + "°";
+    $("texOut").textContent = Math.round(state.tex*100) + "%";
+
+    // stats reflect the mode
+    $("sMines").textContent = String(MINES.length - flags.size);
+    $("sBv").textContent = String(bv);
+    const clics = revealed.size;
+    $("sEff").textContent = (clics && state.mode !== "noguess")
+      ? Math.round(bv/clics*100) + "%" : "—";
+
+    // cells
+    for (let r=0; r<SIZE; r++) for (let c=0; c<SIZE; c++) {
+      const el = boardEl.children[r*SIZE+c];
+      const k = r*SIZE+c;
+      const n = countOf(r,c);
+      el.className = "cell";
+      el.style.color = "";
+      el.textContent = "";
+      const label = `${COLS[c]}${r+1}`;
+
+      if (flags.has(k)) {
+        el.classList.add("flag");
+        el.textContent = "⚑";
+        el.setAttribute("aria-label", `${label}, bandera`);
+      } else if (revealed.has(k)) {
+        el.classList.add("revealed");
+        if (n > 0) {
+          el.textContent = String(n);
+          el.style.color = numColors[n-1];
+          el.style.fontWeight = String(state.num === "weight" ? NUM_WEIGHTS[n-1] : (n >= 5 ? 800 : 700));
+          el.setAttribute("aria-label", `${label}, ${n}`);
+        } else {
+          el.setAttribute("aria-label", `${label}, vacía`);
+        }
+      } else {
+        el.setAttribute("aria-label", `${label}, oculta`);
+      }
+    }
+
+    // hint copy varies with technique emphasis
+    const techMap = {
+      clasico: ["conteo", "Dos celdas seguras.", "El 1 de C3 ya tiene su mina marcada (D2), así que B2 y C2 son seguras."],
+      noguess: ["enumeración", "Este tablero no obliga a adivinar.", "Ninguna celda queda sin prueba: cuando el conteo se traba, se enumeran las configuraciones del componente."],
+      daily: ["subset", "Mismo tablero para todos, hoy.", "Semilla fija: el tablero se puede reproducir y comparar con cualquiera."]
+    }[state.mode];
+    $("techName").textContent = techMap[0];
+    $("hintLead").textContent = techMap[1];
+    $("hintBody").textContent = techMap[2];
+
+    // why overlay
+    renderWhy(numColors);
+
+    // legend of the 8 numbers
+    const legend = $("legend");
+    legend.innerHTML = "";
+    for (let i=1; i<=8; i++) {
+      const row = document.createElement("span");
+      row.innerHTML = `<i style="background:${numColors[i-1]};${state.num==="weight" ? "border:1px solid var(--ctrl-line)" : ""}"></i>${i}${state.num==="weight" ? " · peso " + NUM_WEIGHTS[i-1] : ""}`;
+      legend.appendChild(row);
+    }
+
+    // meter
+    const worstNum = numColors
+      .map((c, i) => ({ n: i + 1, ratio: contrast(c, d.vars["cell-open"]) }))
+      .reduce((a, b) => (b.ratio < a.ratio ? b : a));
+    const pairs = [
+      ["texto", d.vars.text, d.vars.surface, 4.5],
+      ["texto tenue", d.vars["text-dim"], d.vars.surface, 4.5],
+      ["acento ↔ fondo", accent, d.vars.bg, 3.0],
+      ["límite control", d.vars["ctrl-line"], d.vars.surface, 3.0],
+      ["límite sobre elevado", d.vars["ctrl-line"], d.vars["surface-2"], 3.0],
+      [`peor número (${worstNum.n})`, numColors[worstNum.n - 1], d.vars["cell-open"], 4.5]
+    ];
+    meterBody.innerHTML = "";
+    pairs.forEach(([name, fg, bg, floor]) => {
+      const ratio = contrast(fg, bg);
+      const ok = ratio >= floor;
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td>${name}</td><td class="ratio">${ratio.toFixed(2)}</td><td>${floor.toFixed(1)}</td>
+        <td class="${ok ? "pass" : "fail"}">${ok ? "OK" : "FALLA"}</td>`;
+      meterBody.appendChild(tr);
+    });
+
+    updatePrompt(accent, d);
+    syncControls();
+  }
+
+  let whySvg = null;
+  function renderWhy(numColors) {
+    if (whySvg) { whySvg.remove(); whySvg = null; }
+    if (!state.why) return;
+
+    // pick the strongest revealed clue: a "1" with exactly one hidden neighbour
+    let found = null;
+    for (let r=0; r<SIZE && !found; r++) for (let c=0; c<SIZE && !found; c++) {
+      if (!revealed.has(r*SIZE+c)) continue;
+      const n = countOf(r,c);
+      if (n !== 1) continue;
+      const hidden = neighbors(r,c).filter(([a,b]) => !revealed.has(a*SIZE+b));
+      if (hidden.length === 3) {
+        const flagged = hidden.filter(([a,b]) => flags.has(a*SIZE+b));
+        if (flagged.length === 1) found = { r, c, hidden };
+      }
+    }
+    if (!found) return;
+
+    const boardRect = boardEl.getBoundingClientRect();
+    const stageRect = stage.getBoundingClientRect();
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("width", String(boardRect.width));
+    svg.setAttribute("height", String(boardRect.height));
+    svg.style.cssText = `position:absolute;left:${boardRect.left - stageRect.left}px;top:${boardRect.top - stageRect.top}px;pointer-events:none;z-index:3;overflow:visible`;
+
+    const centerOf = (r,c) => {
+      const el = boardEl.children[r*SIZE+c];
+      const b = el.getBoundingClientRect();
+      return { x: b.left - boardRect.left + b.width/2, y: b.top - boardRect.top + b.height/2 };
+    };
+    const from = centerOf(found.r, found.c);
+    found.hidden.forEach(([a,b]) => {
+      const to = centerOf(a,b);
+      if (flags.has(a*SIZE+b)) return;
+      const line = document.createElementNS("http://www.w3.org/2000/svg","path");
+      const mx = (from.x + to.x) / 2;
+      line.setAttribute("d", `M ${from.x} ${from.y} Q ${mx} ${(from.y+to.y)/2 - 16} ${to.x} ${to.y}`);
+      line.setAttribute("fill","none");
+      line.setAttribute("stroke","var(--accent)");
+      line.setAttribute("stroke-width","1.25");
+      line.setAttribute("stroke-dasharray","3 3");
+      line.setAttribute("opacity","0.85");
+      svg.appendChild(line);
+    });
+
+    const badge = document.createElementNS("http://www.w3.org/2000/svg","circle");
+    badge.setAttribute("cx", String(from.x - 15));
+    badge.setAttribute("cy", String(from.y - 15));
+    badge.setAttribute("r","6");
+    badge.setAttribute("fill","var(--accent)");
+    svg.appendChild(badge);
+    const t = document.createElementNS("http://www.w3.org/2000/svg","text");
+    t.setAttribute("x", String(from.x - 15));
+    t.setAttribute("y", String(from.y - 15));
+    t.setAttribute("text-anchor","middle");
+    t.setAttribute("dominant-baseline","central");
+    t.setAttribute("font-size","7");
+    t.setAttribute("font-family","ui-monospace, monospace");
+    t.setAttribute("fill","#0b0d10");
+    t.textContent = "1";
+    svg.appendChild(t);
+
+    stage.appendChild(svg);
+    whySvg = svg;
+  }
+
+  // ---------- prompt ----------
+  function updatePrompt(accent, d) {
+    const parts = [];
+    parts.push(`Usá la dirección visual «${d.name}» para el buscaminas.`);
+    parts.push(`Fondo ${d.vars.bg}, panel ${d.vars.surface}, superficie elevada ${d.vars["surface-2"]}, acento ${accent}.`);
+    parts.push(`El borde de control es ${d.vars["ctrl-line"]} y el separador decorativo ${d.vars.line}: no los mezcles.`);
+    parts.push(state.cell === "flat" ? "Celdas planas, sin relieve."
+      : state.cell === "bevel" ? "Celdas con bisel interno (luz arriba, sombra abajo)."
+      : "Celdas hairline: fondo transparente y borde de 1px en el color de control.");
+    parts.push(state.radius === 0 ? "Sin radio de esquina." : `Radio de celda de ${state.radius}px.`);
+    parts.push(`Textura de fondo al ${Math.round(state.tex*100)}%${state.tex === 0 ? " (ninguna)" : ", solo en la capa de fondo, nunca sobre el tablero"}.`);
+    parts.push(state.num === "hue" ? "Los números 1 a 8 se distinguen por tono."
+      : state.num === "dual" ? "Los números se agrupan en tres familias de color y se distinguen además por peso."
+      : "Los números son monocromos y se distinguen solo por peso tipográfico, del 500 al 900.");
+    if (state.mode === "noguess") parts.push("El tablero se sirve en modo sin adivinanza: cada celda debe ser deducible.");
+    if (state.mode === "daily") parts.push("El tablero es del día: semilla fija, reproducible y compartible.");
+    if (state.why) parts.push("Mostrar «el porqué»: al pedir una pista, dibujar líneas finas desde el número que la justifica hacia las celdas afectadas.");
+    parts.push("Verificá cada par de contraste con la fórmula WCAG antes de darlo por bueno: texto 4.5, límites de control 3.0.");
+    promptEl.textContent = parts.join(" ");
+  }
+
+  $("copyBtn").addEventListener("click", async () => {
+    const btn = $("copyBtn");
+    let ok = false;
+    try {
+      await navigator.clipboard.writeText(promptEl.textContent);
+      ok = true;
+    } catch {
+      // clipboard API unavailable (file:// or denied permission): fall back to selection
+      try {
+        const ta = document.createElement("textarea");
+        ta.value = promptEl.textContent;
+        ta.setAttribute("readonly", "");
+        ta.style.cssText = "position:fixed;top:-1000px;opacity:0";
+        document.body.appendChild(ta);
+        ta.select();
+        ok = document.execCommand("copy");
+        ta.remove();
+      } catch { ok = false; }
+    }
+    btn.textContent = ok ? "Copiado" : "No se pudo copiar";
+    setTimeout(() => { btn.textContent = "Copiar"; }, 1600);
+  });
+
+  // ---------- go ----------
+  buildBoard();
+  render();
+  window.addEventListener("resize", () => { if (state.why) render(); });
+})();
+</script>
+</body>
+</html>

@@ -37,8 +37,19 @@ async function playwright() {
   } catch {
     /* fall through */
   }
-  const req = createRequire('/Users/gonzoblasco/.openclaw/workspace/projects/kanam-fixer/package.json');
-  return req('playwright-core');
+  // Last resort: a local checkout that happens to have browsers. This path is
+  // machine specific by design, and CI never reaches it because the workflow
+  // installs `playwright` into the project. If that changes, fail loudly here
+  // rather than silently resolving a path that cannot exist on the runner.
+  const local = '/Users/gonzoblasco/.openclaw/workspace/projects/kanam-fixer/package.json';
+  try {
+    const req = createRequire(local);
+    return req('playwright-core');
+  } catch {
+    throw new Error(
+      'No Playwright available. In CI run "npm i --no-save playwright && npx playwright install chromium"; locally, install playwright-core in any checkout.'
+    );
+  }
 }
 
 const server = createServer(async (req, res) => {

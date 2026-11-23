@@ -31,10 +31,12 @@ jobs:
       - name: Install
         run: npm ci
 
-      # playwright-core ships no browser downloader. Install the full package
-      # transiently just to fetch the Chromium build, then let the e2e use it.
-      - name: Install Chromium for the end to end suite
-        run: npx --yes playwright@1.63.0 install --with-deps chromium
+      # The e2e imports the `playwright` package. Install it without touching the
+      # lockfile, then fetch the browser it drives.
+      - name: Install Playwright and Chromium for the end to end suite
+        run: |
+          npm i --no-save playwright
+          npx playwright install --with-deps chromium
 
       - name: Unit tests
         run: npm test

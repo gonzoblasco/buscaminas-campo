@@ -327,6 +327,24 @@ check('The game loads and plays with the network off', offlineOk, `${offlineCell
 await offlinePage.context().setOffline(false);
 await offlinePage.close();
 
+// 15. Trainer: the ladder names the board's tier and the steps are real deductions.
+await page.evaluate(() => localStorage.clear());
+await page.reload({ waitUntil: 'networkidle' });
+await page.waitForSelector('.cell');
+const rungs = await page.locator('.trainer__rung').count();
+check('Trainer shows four tiers', rungs === 4, `${rungs} rungs`);
+const tierLine = await page.locator('#trainer-tier-line').textContent();
+check('Trainer names the board tier', /tier \d/.test(tierLine ?? ''), (tierLine ?? '').slice(0, 60));
+await page.click('#trainer-all');
+await page.waitForTimeout(200);
+const stepCount = await page.locator('.trainer__step').count();
+const emptyNote = await page.locator('.trainer__empty').count();
+check('Trainer lists provable steps (or says there are none)', stepCount > 0 || emptyNote > 0, `${stepCount} steps`);
+await page.click('#trainer-next');
+await page.waitForTimeout(200);
+const afterNext = await page.locator('.trainer__step').count();
+check('Trainer applies the next proven step', afterNext >= 1, `${afterNext} shown`);
+
 check('No console errors', consoleErrors.length === 0, consoleErrors.slice(0, 3).join(' | '));
 
 await page.screenshot({ path: '/tmp/bc-final.png', fullPage: false });

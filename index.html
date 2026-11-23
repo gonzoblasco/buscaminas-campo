@@ -131,6 +131,20 @@
         <p id="hint-body"></p>
       </section>
 
+      <section class="trainer" aria-labelledby="trainer-title" id="trainer">
+        <h2 class="micro" id="trainer-title">Entrenador</h2>
+        <p class="trainer__intro" id="trainer-tier-line">
+          Cada tablero tiene un tier: la tecnica mas alta que exige para resolverse sin
+          adivinar.
+        </p>
+        <ol class="trainer__ladder" id="trainer-ladder" role="list"></ol>
+        <div class="trainer__actions">
+          <button type="button" class="btn" id="trainer-next">Siguiente paso probado</button>
+          <button type="button" class="btn" id="trainer-all">Ver todos los pasos</button>
+        </div>
+        <div class="trainer__steps" id="trainer-steps" aria-live="polite"></div>
+      </section>
+
       <section class="records" aria-labelledby="records-title">
         <h2 class="micro" id="records-title">Records</h2>
         <table class="records__table">

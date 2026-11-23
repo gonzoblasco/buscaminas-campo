@@ -30,6 +30,12 @@ import {
   bestRecords,
 } from './persistence.js';
 import { PRESET_LIST } from '../core/presets.js';
+import { tierOf, allDeductions, verifyDeduction } from '../core/logic.js';
+
+const trainerApi = {
+  allDeductions,
+  stepVerified: verifyDeduction,
+};
 import './styles.css';
 
 const $ = (id) => document.getElementById(id);
@@ -54,7 +60,22 @@ const els = {
   offlineChip: $('offline-chip'),
   seedLine: $('seed-line'),
   seedValue: $('seed-value'),
+  trainerTierLine: $('trainer-tier-line'),
+  trainerLadder: $('trainer-ladder'),
+  trainerSteps: $('trainer-steps'),
+  trainerNext: $('trainer-next'),
+  trainerAll: $('trainer-all'),
 };
+
+const TIERS = [
+  { tier: 1, name: 'Conteo', desc: 'Restar las banderas al numero de una celda revelada.' },
+  { tier: 2, name: 'Subconjunto', desc: 'Comparar dos restricciones que se solapan: 1-1, 1-2, 1-2-1.' },
+  { tier: 3, name: 'Conteo global', desc: 'Usar el total de minas que falta contra las celdas de una zona.' },
+  { tier: 4, name: 'Enumeracion', desc: 'Probar todas las configuraciones compatibles de una zona, con tope.' },
+];
+
+// Trainer progress lives in memory per session, keyed by tier reached.
+let trainerProgress = 0;
 
 /** @type {import('./session.js').Session|null} */
 let session = null;
@@ -207,6 +228,7 @@ function newGame(opts = {}) {
   updateStats();
   refreshModeUi();
   startTicker();
+  renderTrainer();
   setBoardNote(
     session.fellBack
       ? 'No se consiguio un tablero que el solver pueda probar sin adivinar dentro del presupuesto. Se sirvio un tablero clasico; este no promete resolverse por logica.'
@@ -243,6 +265,7 @@ function persist() {
 function afterAction() {
   paintBoard();
   updateStats();
+  renderTrainer();
   persist();
   if (session && session.completed) {
     stopTicker();
@@ -473,6 +496,28 @@ function wireEvents() {
 
   els.board.addEventListener('keydown', onKeyDown);
 
+  els.trainerNext.addEventListener('click', () => {
+    if (!session || session.completed) return;
+    const r = sessionHint(session);
+    if (!r.deduction) {
+      renderTrainerSteps([]);
+      return;
+    }
+    renderTrainerSteps([r.deduction]);
+    sessionApplyHint(session, r.deduction, now);
+    setHintPanel('Pista', `${r.deduction.text} (tecnica: ${TECH_NAMES[r.deduction.technique] ?? r.deduction.technique})`, TECH_NAMES[r.deduction.technique]);
+    afterAction();
+    renderTrainer();
+  });
+
+  els.trainerAll.addEventListener('click', () => {
+    if (!session || session.completed) return;
+    // The HoDoKu "all possible steps" view: show everything provable right now.
+    const { allDeductions } = trainerApi;
+    const steps = trainerApi.allDeductions(session.game, { cap: 16 }).filter((d) => trainerApi.stepVerified(session.game, d));
+    renderTrainerSteps(steps);
+  });
+
   els.hintBtn.addEventListener('click', onHint);
   els.pauseBtn.addEventListener('click', togglePause);
   els.newBtn.addEventListener('click', () => newGame());
@@ -510,6 +555,59 @@ function wireEvents() {
     navigator.serviceWorker.register('./sw.js').catch(() => {
       // A failed service worker must not break the game.
     });
+  }
+}
+
+function renderTrainer() {
+  if (!session) return;
+  const tier = session.game.minesPlaced ? tierOf(session.game, { cap: 16 }) : null;
+  els.trainerTierLine.textContent = tier
+    ? `Este tablero es tier ${tier}: se resuelve usando ${TIERS[tier - 1].name.toLowerCase()} como tecnica mas alta.`
+    : session.game.minesPlaced
+      ? 'Este tablero no se puede resolver solo con logica: en el modo sin adivinar no deberia aparecer.'
+      : 'Revela una celda para conocer el tier de este tablero.';
+
+  els.trainerLadder.innerHTML = '';
+  for (const t of TIERS) {
+    const reached = trainerProgress >= t.tier;
+    const current = tier === t.tier;
+    const li = document.createElement('li');
+    li.className = 'trainer__rung';
+    li.dataset.state = current ? 'current' : reached ? 'done' : tier !== null && t.tier > tier ? 'locked' : 'locked';
+    const num = document.createElement('span');
+    num.className = 'trainer__num';
+    num.textContent = String(t.tier);
+    const name = document.createElement('span');
+    name.className = 'trainer__name';
+    name.textContent = t.name;
+    const desc = document.createElement('span');
+    desc.className = 'trainer__desc';
+    desc.textContent = t.desc;
+    li.append(num, name, desc);
+    els.trainerLadder.appendChild(li);
+  }
+
+  if (tier !== null) trainerProgress = Math.max(trainerProgress, tier);
+}
+
+function renderTrainerSteps(steps) {
+  els.trainerSteps.innerHTML = '';
+  if (!steps.length) {
+    const p = document.createElement('p');
+    p.className = 'trainer__empty';
+    p.textContent =
+      'No hay ningun paso probado disponible en este tablero. Si queres seguir, tendrias que apostar: el juego no va a presentarlo como deduccion.';
+    els.trainerSteps.appendChild(p);
+    return;
+  }
+  for (const d of steps) {
+    const box = document.createElement('div');
+    box.className = 'trainer__step';
+    const label = document.createElement('b');
+    label.textContent = `${TECH_NAMES[d.technique] ?? d.technique} · tier ${d.tier}`;
+    box.appendChild(label);
+    box.appendChild(document.createTextNode(d.text));
+    els.trainerSteps.appendChild(box);
   }
 }
 

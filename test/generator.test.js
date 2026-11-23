@@ -123,3 +123,33 @@ test('a generated board is playable: the solver wins using the public solver', (
   assert.ok(solution.steps.length > 0);
   assert.ok(solution.maxTier >= 1 && solution.maxTier <= 4);
 });
+
+
+test('a tiny deadline does not cause a fallback: the attempt floor protects the promise', () => {
+  // The first CI run failed here and the cause was a design flaw, not a slow test:
+  // a wall-clock deadline alone makes a slow machine give up before trying, and a
+  // fallback breaks the no-guess promise. The generator now always makes
+  // DEFAULT_MIN_ATTEMPTS attempts, so the budget is a target, never a cliff.
+  for (let s = 0; s < 8; s++) {
+    const r = generateNoGuess(PRESETS.expert, { seed: deriveSeed(424242, s), deadlineMs: 1 });
+    assert.equal(r.fellBack, false, `a 1 ms deadline produced a fallback on seed ${s}`);
+    const clean = solveFrom(r.game, 16);
+    assert.ok(clean.won, `seed ${s} accepted a board it could not verify`);
+  }
+});
+
+test('the deadline still works once the attempt floor is satisfied', () => {
+  // The floor must not disable the deadline entirely: with a generous floor and an
+  // impossible budget the generator gives up rather than spinning forever.
+  // No perturbation allowed and a single attempt: the only honest outcome is the
+  // fallback. If this ever passes with fellBack === false, the generator is lying
+  // about what it verified.
+  const r = generateNoGuess(PRESETS.expert, {
+    seed: 99,
+    deadlineMs: 1,
+    minAttempts: 1,
+    maxAttempts: 1,
+    maxPerturbations: 0,
+  });
+  assert.equal(r.fellBack, true, 'with no perturbation and one attempt, a fallback is the honest answer');
+});

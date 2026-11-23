@@ -31,6 +31,11 @@ import { createRng, deriveSeed, randInt } from './rng.js';
 export const DEFAULT_ENUM_CAP = 16;
 export const DEFAULT_MAX_ATTEMPTS = 60;
 export const DEFAULT_DEADLINE_MS = 250;
+// A wall-clock deadline alone punishes slow hardware: CI and low-end phones would
+// hit it before the first few attempts, take the fallback, and break the promise.
+// Guaranteeing a minimum number of attempts makes the budget a target rather than
+// a cliff, so a slow machine gets the same chances and simply takes longer.
+export const DEFAULT_MIN_ATTEMPTS = 20;
 export const DEFAULT_MAX_PERTURBATIONS = 40;
 
 /**
@@ -234,7 +239,8 @@ function rebuildWithMines(opening, mines) {
  *   enumCap?: number,
  *   maxAttempts?: number,
  *   deadlineMs?: number,
- *   maxPerturbations?: number
+ *   maxPerturbations?: number,
+ *   minAttempts?: number
  * }} [opts]
  * @returns {{
  *   game: Game,
@@ -251,6 +257,7 @@ export function generateNoGuess(preset, opts = {}) {
   const maxAttempts = opts.maxAttempts ?? DEFAULT_MAX_ATTEMPTS;
   const deadlineMs = opts.deadlineMs ?? DEFAULT_DEADLINE_MS;
   const maxPerturbations = opts.maxPerturbations ?? DEFAULT_MAX_PERTURBATIONS;
+  const minAttempts = opts.minAttempts ?? DEFAULT_MIN_ATTEMPTS;
 
   const t0 = performance.now();
   let attempts = 0;
@@ -259,7 +266,7 @@ export function generateNoGuess(preset, opts = {}) {
   let firstOpening = null;
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    if (performance.now() - t0 > deadlineMs) {
+    if (attempt >= minAttempts && performance.now() - t0 > deadlineMs) {
       deadlineHit = true;
       break;
     }

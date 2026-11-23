@@ -2,8 +2,10 @@
 
 ## Fase actual
 
-**Development, v0.1 jugable.** Programa `buscaminas-campo` en el Planner:
-13/15 pasos completos, 1 en progreso (S9, entrenador), 1 pendiente (S14, cierre).
+**Live.** https://gonzoblasco.github.io/buscaminas-campo/ (HTTP 200, jugable,
+sin errores de consola, ganado una partida usando solo las pistas).
+
+Programa `buscaminas-campo`: **15/15 pasos completos**, lint verde.
 
 El juego se puede jugar de punta a punta: tablero, primer clic, pistas que explican,
 modo sin adivinar por defecto, records separados, post-mortem, metricas, offline,
@@ -19,7 +21,8 @@ Ultima corrida: 2026-11-23. Todos los numeros salen de un comando reproducible.
 | Gate independiente | **8/8** (pass=8 fail=0 skip=0) | `bash scripts/review-gate.sh` |
 | Build de produccion | verde, JS 32.6 kB / gzip 10.7 kB | `npm run build` |
 | E2E en Chromium real | **29/29** con 0 errores de consola | `node scripts/e2e.mjs dist` |
-| Cero dependencias de runtime | `npm ls --omit=dev` vacio | - |
+| Cero dependencias de runtime | `dependencies`/`peer`/`optional` vacios; `vite` unica dev | lee `package.json` |
+| CI en GitHub | **Gate success, Deploy success** | run 45137739938 |
 
 ## La promesa del no-guess, medida
 
@@ -81,11 +84,32 @@ proposito y comprobando que la suite detecta:
 | Contraste | usar el color decorativo como borde de control | falla |
 | Gate completo | sabotaje del generador | `RESULT: FAIL` en 2 checks |
 
+## Lo que encontro el CI (y no se veia local)
+
+Cinco corridas hasta verde. Las cuatro primeras fallas fueron defectos reales,
+tres de ellas en el gate y una en el sitio publicado:
+
+1. **`node --test test/` se rompe en Node 22** (trata el directorio como modulo).
+   Cambiado a un glob, que funciona de Node 20 a 26.
+2. **El gate parseaba solo el reporter `spec`** (`ℹ pass`) y CI imprime TAP
+   (`# pass`): en CI leia cero y lo llamaba pase. Ahora acepta los dos, y un check
+   sin numero falla.
+3. **Un deadline en milisegundos castiga al hardware lento.** En CI Experto caia
+   al fallback, y el fallback rompe la promesa. Ahora el generador siempre hace un
+   minimo de intentos antes de que el deadline lo corte.
+4. **El gate ocultaba el diagnostico del e2e**, lo que costo una vuelta entera de
+   CI para saber por que fallaba. Ahora imprime las ultimas 40 lineas.
+5. **El sitio publicado daba HTTP 200 y pagina en blanco:** Vite emitia rutas
+   absolutas `/assets/...` y Pages sirve en `/<repo>/`. `base: './'` lo arregla.
+   Verificado sirviendo el build bajo un subpath: 81 celdas, offline, cero 404.
+
+El patron detras de los cinco: **la verificacion local media un mundo distinto del
+que corre en produccion** (otra version de Node, otro reporter, otro hardware,
+otra ruta base). Lo que se comparte entre local y CI es el gate, y el gate estaba
+midiendo el entorno en vez del producto.
+
 ## Que falta
 
-- **S9 (en progreso):** modo entrenador con progresion por tecnica. `tierOf` y
-  `solveWithCeiling` ya existen y tienen tests; falta la UI de progresion.
-- **S14 (pendiente):** HANDOFF, CHANGELOG y corrida final desde un arbol limpio.
 - El slider de replay (S8): el `Action[]` se guarda y el contrato esta congelado,
   falta la vista.
 - La UI de apuesta (S7): la probabilidad honesta existe y se niega a inventar un

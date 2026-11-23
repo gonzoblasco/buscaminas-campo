@@ -37,11 +37,22 @@ echo
 
 # ---------------------------------------------------------------- 1. runtime deps
 note "1. Zero runtime dependencies"
-DEPS="$(npm ls --omit=dev --parseable --all 2>/dev/null | tail -n +2)"
-if [ -z "$DEPS" ]; then
-  ok "no runtime dependencies" "npm ls --omit=dev is empty"
+# The claim is about what the project declares, not about what happens to be in
+# node_modules: CI installs Playwright with --no-save for the e2e, and a check that
+# reads the directory would call that a runtime dependency.
+DECLARED="$(node -e '
+const pkg = require("./package.json");
+const deps = Object.keys(pkg.dependencies ?? {});
+const peer = Object.keys(pkg.peerDependencies ?? {});
+const optional = Object.keys(pkg.optionalDependencies ?? {});
+console.log([...deps, ...peer, ...optional].join(" "));
+' 2>&1)"
+if [ -n "$DECLARED" ]; then
+  bad "declared runtime dependencies" "$DECLARED"
+elif [ "$(node -e 'const p=require("./package.json");console.log(Object.keys(p.devDependencies??{}).join(" "))')" != "vite" ]; then
+  bad "devDependencies changed" "expected only vite"
 else
-  bad "runtime dependencies present" "$(echo "$DEPS" | tr '\n' ' ')"
+  ok "no runtime dependencies" "dependencies/peer/optional are empty; the only devDependency is vite"
 fi
 
 # ---------------------------------------------------------------- 2. tests

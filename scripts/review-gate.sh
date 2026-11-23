@@ -47,12 +47,17 @@ fi
 # ---------------------------------------------------------------- 2. tests
 note "2. Unit tests (real counts, not a summary line)"
 TEST_OUT="$(npm test 2>&1)"
-TESTS_LINE="$(echo "$TEST_OUT" | grep -E '^. tests [0-9]+' | tail -1)"
-PASS_LINE="$(echo "$TEST_OUT" | grep -E '^. pass [0-9]+' | tail -1)"
-FAIL_LINE="$(echo "$TEST_OUT" | grep -E '^. fail [0-9]+' | tail -1)"
-T_COUNT="$(echo "$TESTS_LINE" | grep -oE '[0-9]+')"
-P_COUNT="$(echo "$PASS_LINE" | grep -oE '[0-9]+')"
-F_COUNT="$(echo "$FAIL_LINE" | grep -oE '[0-9]+')"
+# Two reporters in the wild: the spec reporter prints "ℹ pass 12", older Node and
+# CI print TAP "# pass 12". Parsing only one of them is how the v1's gate reported
+# a false green: this exact mismatch is what made the first CI run fail while the
+# local gate passed.
+count_of() {
+  local label="$1"
+  echo "$TEST_OUT" | grep -E "(^|[#[:space:]])${label} [0-9]+" | tail -1 | grep -oE '[0-9]+' | tail -1
+}
+T_COUNT="$(count_of tests)"
+P_COUNT="$(count_of pass)"
+F_COUNT="$(count_of fail)"
 if require_output "unit tests" "$TEST_OUT"; then
   if [ -z "$T_COUNT" ] || [ "$T_COUNT" -eq 0 ]; then
     bad "unit tests" "zero tests ran: that is not a pass"
@@ -76,8 +81,8 @@ fi
 # ---------------------------------------------------------------- 4. contrast
 note "4. Contrast measured on the real stylesheet"
 CONTRAST_OUT="$(node --test test/contrast.test.js 2>&1)"
-C_PASS="$(echo "$CONTRAST_OUT" | grep -E '^. pass [0-9]+' | tail -1 | grep -oE '[0-9]+')"
-C_FAIL="$(echo "$CONTRAST_OUT" | grep -E '^. fail [0-9]+' | tail -1 | grep -oE '[0-9]+')"
+C_PASS="$(echo "$CONTRAST_OUT" | grep -E "(^|[#[:space:]])pass [0-9]+" | tail -1 | grep -oE '[0-9]+' | tail -1)"
+C_FAIL="$(echo "$CONTRAST_OUT" | grep -E "(^|[#[:space:]])fail [0-9]+" | tail -1 | grep -oE '[0-9]+' | tail -1)"
 if [ "${C_FAIL:-1}" -ne 0 ]; then
   bad "contrast" "fail=$C_FAIL"
 elif [ "${C_PASS:-0}" -lt 10 ]; then

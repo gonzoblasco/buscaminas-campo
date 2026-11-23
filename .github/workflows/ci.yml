@@ -71,6 +71,12 @@ jobs:
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
+    concurrency:
+      # Pages accepts one deployment at a time; queue instead of cancelling, so a
+      # rapid pair of pushes both land in order rather than the newer one being
+      # killed mid-flight by the older.
+      group: pages
+      cancel-in-progress: false
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -89,6 +95,34 @@ jobs:
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
+
+      # upload-pages-artifact is a SINGLETON per run: it publishes under the fixed
+      # name "github-pages", and deploy-pages refuses to run when it finds more than
+      # one. That is exactly what happened twice on 2026-11-23: a failed deploy was
+      # re-run, the retry uploaded a second artifact into the same run, and the next
+      # deploy failed with "Multiple artifacts named github-pages were unexpectedly
+      # found". It is unrecoverable by re-running, so the recovery is to never be in
+      # that state: delete the leftovers before publishing, which makes the job safe
+      # to re-run any number of times.
+      - name: Clear leftover Pages artifacts
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const run_id = context.runId;
+            const { data } = await github.rest.actions.listWorkflowRunArtifacts({
+              owner, repo, run_id, per_page: 100,
+            });
+            const stale = data.artifacts.filter((a) => a.name === 'github-pages');
+            if (stale.length === 0) {
+              core.info('No leftover github-pages artifacts.');
+              return;
+            }
+            for (const art of stale) {
+              core.info(`Deleting leftover artifact ${art.id} (${art.name}).`);
+              await github.rest.actions.deleteArtifact({ owner, repo, artifact_id: art.id });
+            }
+            core.info(`Deleted ${stale.length} leftover artifact(s); the deploy can proceed.`);
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

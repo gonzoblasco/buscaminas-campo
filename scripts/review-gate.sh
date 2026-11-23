@@ -172,11 +172,19 @@ else
   E2E_OUT="$(node scripts/e2e.mjs dist 2>&1)"
   E2E_LAST="$(echo "$E2E_OUT" | grep -E '^[0-9]+/[0-9]+ checks passed' | tail -1)"
   if [ -z "$E2E_LAST" ]; then
+    # Never swallow the diagnosis: a gate that hides why it failed costs a whole
+    # debugging round trip, which is exactly what happened on the first CI run.
     bad "e2e" "no result line: the run did not complete"
+    echo "----- e2e output (last 40 lines) -----"
+    echo "$E2E_OUT" | tail -40
+    echo "-------------------------------------"
   elif echo "$E2E_LAST" | grep -qE '^([0-9]+)/\1 '; then
     ok "e2e" "$E2E_LAST"
   else
     bad "e2e" "$E2E_LAST"
+    echo "----- e2e output (last 40 lines) -----"
+    echo "$E2E_OUT" | tail -40
+    echo "-------------------------------------"
   fi
 fi
 

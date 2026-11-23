@@ -35,6 +35,7 @@ import { presetOf, PRESETS } from '../core/presets.js';
  * @property {number|null} exploded
  * @property {boolean} completed
  * @property {Game|null} preLoss  state of the board just before the losing click
+ * @property {'1x1'|'3x3'|'5x5'} firstClickArea
  */
 
 /**
@@ -45,7 +46,8 @@ import { presetOf, PRESETS } from '../core/presets.js';
  *   mode: 'noguess'|'classic',
  *   seed?: number,
  *   now?: () => number,
- *   deadlineMs?: number
+ *   deadlineMs?: number,
+ *   firstClickArea?: '1x1'|'3x3'|'5x5'
  * }} opts
  * @returns {Session}
  */
@@ -57,7 +59,11 @@ export function createSession(opts) {
   let game;
   let fellBack = false;
   if (mode === 'noguess') {
-    const result = generateNoGuess(preset, { seed, deadlineMs: opts.deadlineMs ?? 250 });
+    const result = generateNoGuess(preset, {
+      seed,
+      deadlineMs: opts.deadlineMs ?? 250,
+      firstClickArea: opts.firstClickArea ?? '3x3',
+    });
     game = result.game;
     fellBack = result.fellBack;
   } else {
@@ -77,6 +83,7 @@ export function createSession(opts) {
     exploded: null,
     completed: false,
     preLoss: null,
+    firstClickArea: opts.firstClickArea ?? '3x3',
   };
 }
 
@@ -106,7 +113,7 @@ export function sessionReveal(session, i, now = () => Date.now()) {
   if (!session.startedAt) session.startedAt = now();
 
   const wasReady = before.status === 'ready';
-  const next = reveal(before, i, rngFor(session));
+  const next = reveal(before, i, rngFor(session), { firstClickArea: session.firstClickArea });
   session.game = next;
 
   if (wasReady && next.status !== 'lost') {

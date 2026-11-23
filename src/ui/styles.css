@@ -391,6 +391,17 @@ body::after {
   border: 1px solid var(--ctrl-line);
   border-radius: var(--radius);
   min-width: 78px;
+  flex: 0 1 auto;
+}
+
+/* On a narrow screen two stats per row read better than three and a widow. */
+@media (max-width: 560px) {
+  .stat {
+    flex: 1 1 calc(50% - 5px);
+  }
+  .status {
+    gap: 8px;
+  }
 }
 .stat__label {
   font-family: var(--font-mono);
@@ -437,6 +448,7 @@ body::after {
 }
 
 .board {
+  position: relative;
   display: grid;
   gap: 3px;
   width: 100%;
@@ -445,6 +457,9 @@ body::after {
   max-width: min(100%, calc(var(--cols, 9) * 46px));
   margin-inline: auto;
   grid-template-columns: repeat(var(--cols, 9), minmax(24px, 1fr));
+  /* `manipulation` kills the double-tap zoom but still lets a long press fire a
+     pointerdown long enough for the flag timer; `none` would also stop the page
+     from scrolling over the board, which is worse on a small screen. */
   touch-action: manipulation;
 }
 
@@ -469,8 +484,15 @@ body::after {
     background var(--dur-fast) var(--ease-out),
     border-color var(--dur-fast) var(--ease-out);
 }
-.cell:hover:not(.is-revealed) {
-  background: color-mix(in srgb, var(--cell-hidden) 76%, var(--cell-line));
+/* Only a device with a real pointer gets hover: on a touch screen the hover state
+   sticks to the last tapped cell and leaves it looking selected. */
+@media (hover: hover) and (pointer: fine) {
+  .cell:hover:not(.is-revealed) {
+    background: color-mix(in srgb, var(--cell-hidden) 76%, var(--cell-line));
+  }
+  .board.is-marking .cell:not(.is-revealed):hover {
+    background: color-mix(in srgb, var(--cell-hidden) 70%, var(--accent));
+  }
 }
 .cell:focus-visible {
   outline: 2px solid var(--accent);
@@ -824,4 +846,81 @@ body::after {
   .trainer__desc {
     grid-column: 1 / -1;
   }
+}
+
+/* ---------------------------------------------------------------- why layer */
+
+/* The overlay sits above the cells but below nothing it could obscure: it is
+   translucent dashes and a badge, never a filled shape over a digit. */
+.why-layer {
+  animation: why-in var(--dur) var(--ease-out);
+}
+
+@keyframes why-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.cell.is-explained {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* In mark mode a tap flags instead of revealing, so the cursor and the press
+   affordance must say so. */
+.board.is-marking .cell:not(.is-revealed) {
+  cursor: crosshair;
+}
+.btn--mark[aria-pressed="true"] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* ---------------------------------------------------------------- settings */
+
+.settings {
+  position: relative;
+  z-index: 1;
+  padding-block: 20px;
+  border-top: 1px solid var(--line);
+}
+
+.settings__grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+}
+
+.field__label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.field__hint {
+  font-size: 11.5px;
+  color: var(--text-dim);
+  margin: 0;
+  line-height: 1.4;
+}
+
+.check {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.check input {
+  margin-top: 3px;
+  accent-color: var(--accent);
+  width: 15px;
+  height: 15px;
 }

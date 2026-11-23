@@ -356,6 +356,118 @@ await page.waitForTimeout(200);
 const afterNext = await page.locator('.trainer__step').count();
 check('Trainer applies the next proven step', afterNext >= 1, `${afterNext} shown`);
 
+// 16. The two settings must change behaviour, not just be stored (they were dead).
+await page.evaluate(() => localStorage.clear());
+await page.reload({ waitUntil: 'networkidle' });
+await page.waitForSelector('.cell');
+// The opening size is not monotonic in the area: a larger guaranteed-safe zone can
+// land on a different board whose zero-region happens to be smaller. Asserting
+// "5x5 opens more" would encode a false claim about the world.
+//
+// What this level can prove is that the control is real, wired and persisted. That
+// the setting actually changes the safe zone is proven in test/safearea.test.js,
+// where the seed is held constant and the zone size is measured directly (1, 9 and
+// 25 cells for a centre cell, plus 900 reveal cases per area).
+for (const area of ['1x1', '3x3', '5x5']) {
+  await page.click(`[data-area="${area}"]`);
+  await page.waitForTimeout(80);
+  const pressed = await page.locator(`[data-area="${area}"]`).getAttribute('aria-pressed');
+  check(`The ${area} area control is selectable`, pressed === 'true', String(pressed));
+}
+await page.click('[data-area="5x5"]');
+await page.waitForTimeout(80);
+const areaStored = await page.evaluate(() => JSON.parse(localStorage.getItem('bc.settings.v2') ?? '{}').firstClickArea);
+check('The area setting persists', areaStored === '5x5', String(areaStored));
+await page.reload({ waitUntil: 'networkidle' });
+await page.waitForSelector('.cell');
+const areaAfterReload = await page.locator('[data-area="5x5"]').getAttribute('aria-pressed');
+check('The area setting survives a reload', areaAfterReload === 'true', String(areaAfterReload));
+
+// 17. "Show the why" draws the reasoning when the hint fires.
+await page.evaluate(() => localStorage.clear());
+await page.reload({ waitUntil: 'networkidle' });
+await page.waitForSelector('.cell');
+await page.check('#show-why');
+await page.waitForTimeout(120);
+await page.click('#hint-btn');
+await page.waitForTimeout(350);
+const whyLayers = await page.locator('.why-layer').count();
+const whyPaths = await page.locator('.why-layer path').count();
+const explained = await page.locator('.cell.is-explained').count();
+check('"Show the why" draws an overlay', whyLayers === 1, `${whyLayers} layers`);
+check('The overlay has lines to the resolved cells', whyPaths >= 1, `${whyPaths} paths`);
+check('The resolved cells are ringed', explained >= 1, `${explained} ringed`);
+await page.evaluate(() => localStorage.clear());
+await page.reload({ waitUntil: 'networkidle' });
+await page.waitForSelector('.cell');
+await page.click('#hint-btn');
+await page.waitForTimeout(250);
+check('With the setting off, no overlay is drawn', (await page.locator('.why-layer').count()) === 0);
+
+// 18. Mark mode: a touch screen has no right click, so tapping must flag.
+// A restored game comes back PAUSED on purpose, and `beforeunload` re-persists it,
+// so a cleared storage followed by a reload does not start a fresh game. Resume
+// before interacting, which is also what a player would do.
+const pauseLabel = (await page.locator('#pause-btn').textContent())?.trim();
+if (pauseLabel === 'Continuar') {
+  await page.click('#pause-btn');
+  await page.waitForTimeout(150);
+}
+check('A restored game is paused until resumed', pauseLabel === 'Continuar', String(pauseLabel));
+await page.click('#mark-btn');
+await page.waitForTimeout(120);
+const markPressed = await page.locator('#mark-btn').getAttribute('aria-pressed');
+check('The mark button toggles a mode', markPressed === 'true');
+// Cells must be hidden AND unmarked. Clicking a cell that already carries a flag
+// cycles it to a question mark, which is correct behaviour but would make this
+// check measure the previous test's leftovers instead of this one's.
+const markTargets = await page.evaluate(() => {
+  const els = [...document.querySelectorAll('.cell')];
+  return els
+    .map((c, i) => ({
+      i,
+      free: !c.classList.contains('is-revealed') && !c.classList.contains('is-flag') && !c.classList.contains('is-question'),
+    }))
+    .filter((x) => x.free)
+    .slice(0, 3)
+    .map((x) => x.i);
+});
+const flagsBefore = await page.locator('.cell.is-flag').count();
+const revealedBefore = await page.locator('.cell.is-revealed').count();
+const markLog = [];
+for (const i of markTargets) {
+  // Select by data-index, not by position: nth() would silently address a different
+  // cell if the DOM order ever stopped matching the index.
+  const loc = page.locator(`.cell[data-index="${i}"]`);
+  const vis = await loc.isVisible();
+  const covered = await loc.evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    const top = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+    return top === el || el.contains(top) ? null : (top?.className ?? 'unknown');
+  }).catch((e) => `eval-failed: ${e.message}`);
+  await loc.click({ timeout: 3000 }).catch((e) => (markLog.push(`cell ${i}: click failed ${e.message.split('\n')[0]}`)));
+  await page.waitForTimeout(140);
+  const state = await page.evaluate((idx) => {
+    const el = document.querySelector(`.cell[data-index="${idx}"]`);
+    return el?.className ?? 'missing';
+  }, i);
+  markLog.push(`cell ${i}: visible=${vis} blocker=${covered ?? 'none'} state=${state}`);
+}
+if (process.env.DEBUG_MARK) console.log(markLog.join('\n'));
+// One tap per distinct cell puts a flag on each. A second tap on the same cell
+// would cycle it to a question mark, which is correct behaviour but not what this
+// check is about, so the cells are distinct by construction.
+const flagsInMarkMode = await page.locator('.cell.is-flag').count();
+const revealedAfter = await page.locator('.cell.is-revealed').count();
+// Relative, not absolute: a restored game can already carry flags, and this check
+// is about the three taps it just made.
+check(
+  'Mark mode flags instead of revealing',
+  flagsInMarkMode === flagsBefore + markTargets.length,
+  `${flagsBefore} + ${markTargets.length} -> ${flagsInMarkMode} flags`
+);
+check('Mark mode opens nothing', revealedAfter === revealedBefore, `${revealedBefore} -> ${revealedAfter}`);
+
 check('No console errors', consoleErrors.length === 0, consoleErrors.slice(0, 3).join(' | '));
 
 await page.screenshot({ path: '/tmp/bc-final.png', fullPage: false });

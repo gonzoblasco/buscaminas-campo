@@ -124,9 +124,9 @@ function log(game, action) {
  * @param {{ next: () => number }} rng
  * @returns {void}
  */
-function ensureMines(game, i, rng) {
+function ensureMines(game, i, rng, area = '3x3') {
   if (game.minesPlaced) return;
-  placeMines(game, rng, safeZoneOf(game, i));
+  placeMines(game, rng, safeZoneOf(game, i, area));
   game.minesPlaced = true;
 }
 
@@ -160,7 +160,7 @@ function floodFrom(game, start) {
  * @param {Game} game
  * @param {number} i
  * @param {{ next: () => number }} rng
- * @param {{ technique?: string|null, bet?: boolean }} [meta]
+ * @param {{ technique?: string|null, bet?: boolean, firstClickArea?: '1x1'|'3x3'|'5x5' }} [meta]
  * @returns {Game}
  */
 export function reveal(game, i, rng, meta = {}) {
@@ -170,7 +170,7 @@ export function reveal(game, i, rng, meta = {}) {
   if (game.marks[i] === MARK_FLAG) return game;
 
   const next = cloneGame(game);
-  ensureMines(next, i, rng);
+  ensureMines(next, i, rng, meta.firstClickArea);
   if (next.marks[i] !== MARK_NONE) next.marks[i] = MARK_NONE;
 
   if (next.mines[i] === 1) {

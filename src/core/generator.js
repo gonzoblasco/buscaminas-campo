@@ -240,7 +240,8 @@ function rebuildWithMines(opening, mines) {
  *   maxAttempts?: number,
  *   deadlineMs?: number,
  *   maxPerturbations?: number,
- *   minAttempts?: number
+ *   minAttempts?: number,
+ *   firstClickArea?: '1x1'|'3x3'|'5x5'
  * }} [opts]
  * @returns {{
  *   game: Game,
@@ -273,7 +274,7 @@ export function generateNoGuess(preset, opts = {}) {
     const attemptSeed = deriveSeed(seed, attempt);
     const probe = createGame(preset, { seed: attemptSeed });
     const cell = opts.cell ?? randInt(createRng(deriveSeed(attemptSeed, 31)), probe.size);
-    const opening = reveal(probe, cell, createRng(attemptSeed));
+    const opening = reveal(probe, cell, createRng(attemptSeed), { firstClickArea: opts.firstClickArea });
     if (!firstOpening) firstOpening = opening;
     attempts++;
 
@@ -309,7 +310,7 @@ export function generateNoGuess(preset, opts = {}) {
   // Fallback: serve a classic board and SAY SO.
   const fallbackOpening =
     firstOpening ??
-    reveal(createGame(preset, { seed }), opts.cell ?? 0, createRng(seed));
+    reveal(createGame(preset, { seed }), opts.cell ?? 0, createRng(seed), { firstClickArea: opts.firstClickArea });
   return {
     game: fallbackOpening,
     attempts,

@@ -107,7 +107,41 @@
         </div>
         <div class="status__actions">
           <button type="button" class="btn" id="hint-btn">Pista</button>
+          <button type="button" class="btn btn--mark" id="mark-btn" aria-pressed="false">
+            Marcar
+          </button>
           <button type="button" class="btn" id="pause-btn" aria-pressed="false">Pausar</button>
+        </div>
+      </section>
+
+      <section class="settings" aria-labelledby="settings-title">
+        <h2 class="micro" id="settings-title">Ajustes</h2>
+        <div class="settings__grid">
+          <div class="field">
+            <span class="field__label" id="area-label">Area segura del primer clic</span>
+            <div class="segmented" role="group" aria-labelledby="area-label" id="area-group">
+              <button type="button" class="seg" data-area="1x1" aria-pressed="false">1x1</button>
+              <button type="button" class="seg" data-area="3x3" aria-pressed="true">3x3</button>
+              <button type="button" class="seg" data-area="5x5" aria-pressed="false">5x5</button>
+            </div>
+            <p class="field__hint">
+              Cuantas celdas garantiza libres el primer clic. Un area mas grande abre
+              mas tablero de arranque.
+            </p>
+          </div>
+          <div class="field">
+            <span class="field__label">Explicacion visual</span>
+            <label class="check">
+              <input type="checkbox" id="show-why" />
+              <span>
+                Mostrar el porque dibujado
+                <span class="field__hint">
+                  Al pedir una pista, traza lineas desde la celda que la justifica
+                  hasta las celdas que resuelve.
+                </span>
+              </span>
+            </label>
+          </div>
         </div>
       </section>
 

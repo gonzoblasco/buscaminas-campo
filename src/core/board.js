@@ -80,15 +80,29 @@ export function indexOf(game, x, y) {
 }
 
 /**
- * The cells that must stay mine-free on the first click: the cell itself and
- * its in-bounds neighbours. At most 9 cells, which the preset invariant reserves.
+ * The cells that must stay mine-free on the first click.
+ * 1x1 keeps only the clicked cell, 3x3 (the default) adds its neighbours, 5x5
+ * adds the ring around them. The presets reserve space for 5x5: the smallest
+ * board is 9x9 with 10 mines, and 81 - 9 = 72 > 10.
  * @param {Game} game
  * @param {number} i
+ * @param {'1x1'|'3x3'|'5x5'} [area]
  * @returns {Set<number>}
  */
-export function safeZoneOf(game, i) {
+export function safeZoneOf(game, i, area = '3x3') {
   const zone = new Set([i]);
-  for (const n of neighborsOf(game, i)) zone.add(n);
+  if (area === '1x1') return zone;
+  const radius = area === '5x5' ? 2 : 1;
+  const x = i % game.width;
+  const y = Math.floor(i / game.width);
+  for (let dy = -radius; dy <= radius; dy++) {
+    for (let dx = -radius; dx <= radius; dx++) {
+      const nx = x + dx;
+      const ny = y + dy;
+      if (nx < 0 || ny < 0 || nx >= game.width || ny >= game.height) continue;
+      zone.add(ny * game.width + nx);
+    }
+  }
   return zone;
 }
 

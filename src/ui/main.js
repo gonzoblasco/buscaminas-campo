@@ -19,7 +19,7 @@ import {
   sessionStats,
   postMortem,
 } from './session.js';
-import { buildBoard, paint, focusCell, moveBy, labelOf } from './render.js';
+import { buildBoard, paint, focusCell, moveBy, labelOf, drawWhy, clearWhy } from './render.js';
 import {
   loadSettings,
   saveSettings,
@@ -47,6 +47,7 @@ const els = {
   statBv: $('stat-bv'),
   statEff: $('stat-eff'),
   hintBtn: $('hint-btn'),
+  markBtn: $('mark-btn'),
   pauseBtn: $('pause-btn'),
   newBtn: $('new-game'),
   hintPanel: $('hint-panel'),
@@ -65,6 +66,8 @@ const els = {
   trainerSteps: $('trainer-steps'),
   trainerNext: $('trainer-next'),
   trainerAll: $('trainer-all'),
+  showWhy: $('show-why'),
+  areaGroup: $('area-group'),
 };
 
 const TIERS = [
@@ -76,6 +79,13 @@ const TIERS = [
 
 // Trainer progress lives in memory per session, keyed by tier reached.
 let trainerProgress = 0;
+
+// Touch devices have no right click, so flagging needs either a long press or an
+// explicit mode. Both are wired: the long press is the fast path, the mode is the
+// discoverable one.
+let markMode = false;
+let longPressTimer = null;
+let longPressFired = false;
 
 /** @type {import('./session.js').Session|null} */
 let session = null;
@@ -172,8 +182,35 @@ function setBoardNote(text) {
   els.boardNote.textContent = text;
 }
 
+function syncSettingsUi() {
+  const settings = loadSettings();
+  els.showWhy.checked = Boolean(settings.showWhy);
+  for (const btn of document.querySelectorAll('[data-area]')) {
+    btn.setAttribute('aria-pressed', String(btn.dataset.area === settings.firstClickArea));
+  }
+}
+
 function refreshModeUi() {
   const mode = session?.mode ?? loadSettings().mode;
+  els.showWhy.addEventListener('change', () => {
+    saveSettings({ showWhy: els.showWhy.checked });
+    if (!els.showWhy.checked) clearWhy(els.board);
+  });
+
+  for (const btn of document.querySelectorAll('[data-area]')) {
+    btn.addEventListener('click', () => {
+      const area = btn.dataset.area;
+      saveSettings({ firstClickArea: area });
+      syncSettingsUi();
+      // The area only affects a board that has not placed its mines yet.
+      if (session && !session.game.minesPlaced) {
+        session.firstClickArea = area;
+      } else if (session) {
+        setBoardNote('El area segura se aplica a la proxima partida: este tablero ya tiene sus minas colocadas.');
+      }
+    });
+  }
+
   for (const btn of document.querySelectorAll('[data-mode]')) {
     btn.setAttribute('aria-pressed', String(btn.dataset.mode === mode));
   }
@@ -212,6 +249,7 @@ function newGame(opts = {}) {
       mode,
       seed: opts.seed,
       deadlineMs: mode === 'noguess' ? 250 : undefined,
+      firstClickArea: settings.firstClickArea,
     });
   } catch (err) {
     els.boardHint.textContent = `No se pudo crear la partida: ${err.message}`;
@@ -263,6 +301,7 @@ function persist() {
 }
 
 function afterAction() {
+  clearWhy(els.board);
   paintBoard();
   updateStats();
   renderTrainer();
@@ -359,12 +398,12 @@ function onHint() {
     return;
   }
   setHintPanel('Pista', `${r.deduction.text} (tecnica: ${TECH_NAMES[r.deduction.technique] ?? r.deduction.technique})`, TECH_NAMES[r.deduction.technique]);
-  // Highlight the cells the deduction is about.
-  for (const c of r.deduction.cells) {
-    cells[c]?.classList.add('was-just-revealed');
-  }
-  sessionApplyHint(session, r.deduction, now);
+  const wantsWhy = loadSettings().showWhy;
+  const deduction = r.deduction;
+  sessionApplyHint(session, deduction, now);
   afterAction();
+  // Draw after the repaint so the geometry of the resolved cells is final.
+  if (wantsWhy) drawWhy(els.board, cells, session.game, deduction);
 }
 
 function togglePause() {
@@ -469,12 +508,48 @@ function wireEvents() {
   els.board.addEventListener('click', (e) => {
     const cell = e.target.closest('.cell');
     if (!cell || !session) return;
+    // A long press already handled this interaction on a touch screen; without
+    // this guard the synthetic click that follows would reveal the cell you just
+    // flagged.
+    if (longPressFired) {
+      longPressFired = false;
+      return;
+    }
     const i = Number(cell.dataset.index);
     if (!Number.isInteger(i)) return;
     focusIndex = i;
     if (session.game.revealed[i] === 1) onChord(i);
+    else if (markMode) onMark(i);
     else onReveal(i);
   });
+
+  // Long press to flag: the only way a phone can mark a cell, since there is no
+  // right button and iOS never fires contextmenu on a long tap.
+  els.board.addEventListener('pointerdown', (e) => {
+    const cell = e.target.closest('.cell');
+    if (!cell || !session || e.pointerType === 'mouse') return;
+    const i = Number(cell.dataset.index);
+    if (!Number.isInteger(i) || session.game.revealed[i] === 1) return;
+    longPressFired = false;
+    if (longPressTimer) clearTimeout(longPressTimer);
+    longPressTimer = setTimeout(() => {
+      longPressFired = true;
+      longPressTimer = null;
+      focusIndex = i;
+      onMark(i);
+      if (navigator.vibrate) navigator.vibrate(12);
+    }, 420);
+  });
+
+  const cancelLongPress = () => {
+    if (longPressTimer) {
+      clearTimeout(longPressTimer);
+      longPressTimer = null;
+    }
+  };
+  els.board.addEventListener('pointerup', cancelLongPress);
+  els.board.addEventListener('pointercancel', cancelLongPress);
+  els.board.addEventListener('pointerleave', cancelLongPress);
 
   els.board.addEventListener('contextmenu', (e) => {
     const cell = e.target.closest('.cell');
@@ -506,7 +581,10 @@ function wireEvents() {
     renderTrainerSteps([r.deduction]);
     sessionApplyHint(session, r.deduction, now);
     setHintPanel('Pista', `${r.deduction.text} (tecnica: ${TECH_NAMES[r.deduction.technique] ?? r.deduction.technique})`, TECH_NAMES[r.deduction.technique]);
+    const wantsWhy = loadSettings().showWhy;
+    const deduction = r.deduction;
     afterAction();
+    if (wantsWhy) drawWhy(els.board, cells, session.game, deduction);
     renderTrainer();
   });
 
@@ -516,6 +594,16 @@ function wireEvents() {
     const { allDeductions } = trainerApi;
     const steps = trainerApi.allDeductions(session.game, { cap: 16 }).filter((d) => trainerApi.stepVerified(session.game, d));
     renderTrainerSteps(steps);
+  });
+
+  els.markBtn.addEventListener('click', () => {
+    markMode = !markMode;
+    els.markBtn.setAttribute('aria-pressed', String(markMode));
+    els.markBtn.textContent = markMode ? 'Revelar' : 'Marcar';
+    els.board.classList.toggle('is-marking', markMode);
+    els.boardHint.textContent = markMode
+      ? 'Modo marcar: cada toque pone o quita una bandera. Pulsa Revelar para volver a abrir celdas.'
+      : 'Modo revelar: cada toque abre una celda. Una pulsacion larga marca.';
   });
 
   els.hintBtn.addEventListener('click', onHint);
@@ -658,6 +746,7 @@ function restoreOrNew() {
         exploded: null,
         completed: snapshot.game.status === 'won' || snapshot.game.status === 'lost',
         preLoss: null,
+        firstClickArea: loadSettings().firstClickArea,
       };
       cells = buildBoard(els.board, session.game);
       paintBoard();
@@ -679,5 +768,6 @@ function restoreOrNew() {
 
 // Boot.
 wireEvents();
+syncSettingsUi();
 renderRecords();
 restoreOrNew();

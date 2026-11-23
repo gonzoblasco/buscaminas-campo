@@ -17,10 +17,10 @@ Ultima corrida: 2026-11-23. Todos los numeros salen de un comando reproducible.
 
 | Gate | Resultado | Comando |
 |---|---|---|
-| Tests unitarios | **103 tests, 103 pass, 0 fail** | `npm test` |
+| Tests unitarios | **115 tests, 115 pass, 0 fail** | `npm test` |
 | Gate independiente | **8/8** (pass=8 fail=0 skip=0) | `bash scripts/review-gate.sh` |
 | Build de produccion | verde, JS 32.6 kB / gzip 10.7 kB | `npm run build` |
-| E2E en Chromium real | **29/29** con 0 errores de consola | `node scripts/e2e.mjs dist` |
+| E2E en Chromium real | **46/46** con 0 errores de consola | `node scripts/e2e.mjs dist` |
 | Cero dependencias de runtime | `dependencies`/`peer`/`optional` vacios; `vite` unica dev | lee `package.json` |
 | CI en GitHub | **Gate success, Deploy success** | run 45137739938 |
 
@@ -110,12 +110,29 @@ midiendo el entorno en vez del producto.
 
 ## Que falta
 
-- El slider de replay (S8): el `Action[]` se guarda y el contrato esta congelado,
-  falta la vista.
-- La UI de apuesta (S7): la probabilidad honesta existe y se niega a inventar un
-  numero cuando no puede calcularlo; falta mostrarla antes de un clic arriesgado.
-- El dibujo del "porque" en SVG sobre el tablero (S5): hoy la pista resalta las
-  celdas de la deduccion. El trazado completo esta prototipado en el playground.
+- El slider de replay: el `Action[]` se guarda con tecnica y tope de 4096, el
+  contrato esta congelado y hay tests; falta la vista.
+- La UI de apuesta: `mineProbabilityAt` devuelve la probabilidad por enumeracion y
+  devuelve `null` cuando no puede calcularla honestamente; falta mostrarla antes de
+  un clic arriesgado.
+- Lecciones de tier (practica dirigida): el tiering existe y esta testeado, pero el
+  entrenador muestra pasos, no lecciones.
+
+## Lo que se arreglo despues de publicar (defectos propios, no features)
+
+1. **`firstClickArea` y `showWhy` se persistian y nunca se leian.** Dos ajustes
+   muertos son dos promesas vacias. Ahora el area (1x1/3x3/5x5) cambia de verdad la
+   zona segura de punta a punta hasta el generador, y "mostrar el porque" dibuja el
+   trazado. Seis tests nuevos, y el del area se probo en negativo (ignorando el
+   ajuste, tres tests fallan).
+2. **El juego no se podia jugar en un telefono.** No habia `pointerdown` ni
+   long-press: solo `contextmenu`, que iOS nunca dispara, asi que no habia forma de
+   poner una bandera. Ahora hay pulsacion larga y un modo Marcar explicito.
+3. **El hover se pegaba en tactil** y dejaba la ultima celda tocada como si estuviera
+   seleccionada. Movido a `@media (hover: hover)`.
+4. **Dos tests e2e mios estaban mal** y se corrigieron en vez de aflojarlos: uno
+   clickeaba por posicion del DOM cuando importaba el indice, y otro asumia que un
+   area segura mas grande siempre abre mas tablero (falso: cambia el tablero).
 
 ## Numeros con fuente y fecha
 
